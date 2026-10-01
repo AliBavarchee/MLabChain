@@ -1,0 +1,23 @@
+{
+  "challenge_id": "MLC-LINEAR-001",
+  "description": "Synthetic linear regression, N=400, F=4, noise=0.1, seed=42.",
+  "dataset_kind": "synthetic_linear",
+  "dataset_sha256": "fb1ef0bf668368ee692d5a0ecdd2aaa285a17be8ffa4c375cd858e053933b81c",
+  "n_samples": 400,
+  "n_features": 4,
+  "generator_seed": 42,
+  "generator_noise": 0.1,
+  "split_rule": "first_fraction",
+  "train_fraction": 0.8,
+  "metric": "NMSE",
+  "baseline_kind": "mean_predictor",
+  "baseline_nmse": 1.0,
+  "baseline_model_sha256": null,
+  "lswu_N0": 100000.0,
+  "lswu_t0": 60.0,
+  "lswu_eta": 2.0,
+  "lswu_wN": 0.15,
+  "lswu_wt": 0.3,
+  "lswu_wQ": 1.0,
+  "manifest_sha256": "ae6bb3556e7f1f6fb946b4497a86256daf0daf5db543004d7d62feea8816a6dd"
+}

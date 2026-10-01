@@ -1,0 +1,23 @@
+{
+  "challenge_id": "MLC-DEMO-LINEAR-001",
+  "description": "Synthetic linear regression, N=400, F=4, noise=0.1, seed=7.",
+  "dataset_kind": "synthetic_linear",
+  "dataset_sha256": "e166c16c75c1541423df95ccdf22627f1b9edc8aab21711b2b49d75d8a702950",
+  "n_samples": 400,
+  "n_features": 4,
+  "generator_seed": 7,
+  "generator_noise": 0.1,
+  "split_rule": "first_fraction",
+  "train_fraction": 0.8,
+  "metric": "NMSE",
+  "baseline_kind": "mean_predictor",
+  "baseline_nmse": 1.0,
+  "baseline_model_sha256": null,
+  "lswu_N0": 100000.0,
+  "lswu_t0": 60.0,
+  "lswu_eta": 2.0,
+  "lswu_wN": 0.15,
+  "lswu_wt": 0.3,
+  "lswu_wQ": 1.0,
+  "manifest_sha256": "f87c7fe94bbfa165621a76b4b8fcd784f633f82c3f11706f3b5f4f4e9b4ebe09"
+}

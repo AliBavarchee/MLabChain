@@ -1,6 +1,6 @@
 model_type=linear-regression
 framework=mlabchain-native
-n_features=5
+n_features=4
 optimizer=SGD
 learning_rate=0.01
-epochs=35
+epochs=60

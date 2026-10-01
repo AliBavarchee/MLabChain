@@ -1,7 +1,7 @@
 {
   "difficulty": 3,
   "merkle_scheme": "leaf-parent-v2",
-  "schema_version": 1,
+  "schema_version": 2,
   "chain": [
     {
       "index": 0,
@@ -15,110 +15,142 @@
     },
     {
       "index": 1,
-      "timestamp": "2026-09-29T07:11:33.602383+00:00",
+      "timestamp": "2026-09-29T08:56:48.479689+00:00",
       "previous_hash": "e81c026cc75da204a9e9cc4dde0e568dd5d0bf1db4064f803ff6e54f46074dce",
-      "merkle_root": "60b2b5368541667e29600fc8d7880dbe869e080075dcd3532592414e75b96911",
+      "merkle_root": "bbb830953bf932bd4ec15b8c952b3893cf91f75d8ea4a0c53abef19c7c9f7471",
       "transactions": [
         {
           "tx_type": "ML_TRAINING",
-          "sender": "ML-fe13bb70a093258f246a",
-          "timestamp": "2026-09-29T07:11:33.595600+00:00",
+          "sender": "ML-7f02216fe15261a34659",
+          "timestamp": "2026-09-29T08:56:48.479689+00:00",
           "payload": {
-            "schema_version": 1,
+            "schema_version": 2,
             "kind": "ml-training",
-            "framework": "mlabchain-native",
-            "model_type": "linear-regression",
+            "challenge": {
+              "challenge_id": "MLC-DEMO-LINEAR-001",
+              "manifest_sha256": "f87c7fe94bbfa165621a76b4b8fcd784f633f82c3f11706f3b5f4f4e9b4ebe09",
+              "dataset_sha256": "e166c16c75c1541423df95ccdf22627f1b9edc8aab21711b2b49d75d8a702950",
+              "split_rule": "first_fraction",
+              "train_fraction": 0.8,
+              "metric": "NMSE",
+              "baseline_kind": "mean_predictor",
+              "baseline_nmse": 1.0
+            },
             "config": {
               "model_type": "linear-regression",
               "framework": "mlabchain-native",
-              "n_samples": 300,
-              "n_features": 3,
               "seed": 1,
-              "noise": 0.1,
               "learning_rate": 0.01,
-              "epochs": 25,
-              "train_fraction": 0.8
+              "epochs": 10
             },
-            "config_sha256": "3fb674cfe3ad1c4ed7d14a3f560d95d9decf043d3b501a617a059143cd1e7052",
-            "config_file": {
-              "path": "mlabchain_data\\demo\\config.json"
-            },
+            "config_sha256": "c6ad7e0f52a7dd3a297792b3a6f5dbaca427bbe239e65ecd7bc968a705db33ae",
             "model_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_3fb674cfe3ad.pkl",
-              "sha256": "c04f7f4903d62f4ce009a32d28e992e7070e85fb87a5164d6620e45fac2aed12",
-              "size_bytes": 79
-            },
-            "arch_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_3fb674cfe3ad.txt",
-              "sha256": "fbf7f75835d0af6008470bfcf9a17714e4fe69187495849c7528c48af4b24eed",
-              "size_bytes": 112,
-              "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=3\noptimizer=SGD\nlearning_rate=0.01\nepochs=25\n"
-            },
-            "training": {
-              "n_train": 240,
-              "n_test": 60,
-              "epochs": 25,
-              "learning_rate": 0.01,
-              "wall_time_seconds": 0.006664699874818325
-            },
-            "metrics": {
-              "mse_train": 0.009854886614079102,
-              "mse_test": 0.011262275885456434,
-              "r2_test": 0.992602839450633
-            },
-            "notes": "Demo training 1",
-            "tags": [
-              "demo",
-              "linear-regression"
-            ],
-            "recorded_at": "2026-09-29T07:11:33.595600+00:00"
-          },
-          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwS5N+OL2HRgSx+4tc9Zu\np/50i4gw2kSs21saN9uEWgW9kGC2R/iClkp2TI+Pc5EWXyMBTeSjjXtJNaabggE+\nHRffdteB0eMcc0L6gFGJU0lYHx0o18bQEWyP6EDlBvCYyGDFJmaUEibep30Ji9y9\n00hm65PUdX8E/GYf5RFUJRaPk+t7X1B+zIWQBqfE/QDRgGXCBcemh7b2yrEfR81p\nXn1KkxYfzMJl4csqnlCDDSeXXo1+QCNVubu9RKq47f9tgZbt66n/z2P6y7doH/FQ\n58qObNhBXXg+ct7BY4kC+sjZkkXm6hizAxlDN1q6oRM2uK1ZJkbzcVxlMWZEurCj\n6QIDAQAB\n-----END PUBLIC KEY-----\n",
-          "nonce": "dbe586bf932f50a30707c1f4136ebcf7",
-          "signature": "Aye5W2MJmkIMCrPzeUKofAQNzl7UvYX+hJtv4Uut6bVrqZYQs9xNrKxgzLNn+B5Ugk9bAUhM93wmoFgbF0hMivmNP4SXx96cUv96nnWVJ9S8GJL4CDoUn4SS9LwFlGLQIJpdFPiZglOCZQ2G1AJCAzrcEuNpWZYS61go29XlXoeUdCSu0dt+eX4hvbaLLdoyNBQ+37+WjGF6frhYWMH/Zp4n2MqvkNT6U8aptLFPAganERlLQFmOGsMrIdNEgVO9YmVg5YyXsRNKZqY2vXrNLR0pgoyGsl2zVaEW3X/kRhgMhrVNQl0KzO30KVwIDppxPfPJwrLpJiiSr32SpaM/Cg=="
-        }
-      ],
-      "difficulty": 3,
-      "nonce": 815,
-      "block_hash": "0007d8f79d7845a5cc2be0a4186495a2407cb5cc3c25499f0f287c195c85585f"
-    },
-    {
-      "index": 2,
-      "timestamp": "2026-09-29T07:11:33.628473+00:00",
-      "previous_hash": "0007d8f79d7845a5cc2be0a4186495a2407cb5cc3c25499f0f287c195c85585f",
-      "merkle_root": "f94ece20206ce2e72fbb5db6af998a930476c1df64873e22aa8fb75624e4546f",
-      "transactions": [
-        {
-          "tx_type": "ML_TRAINING",
-          "sender": "ML-fe13bb70a093258f246a",
-          "timestamp": "2026-09-29T07:11:33.625738+00:00",
-          "payload": {
-            "schema_version": 1,
-            "kind": "ml-training",
-            "framework": "mlabchain-native",
-            "model_type": "linear-regression",
-            "config": {
-              "model_type": "linear-regression",
-              "framework": "mlabchain-native",
-              "n_samples": 400,
-              "n_features": 4,
-              "seed": 2,
-              "noise": 0.1,
-              "learning_rate": 0.01,
-              "epochs": 30,
-              "train_fraction": 0.8
-            },
-            "config_sha256": "36379b50cbb232ebbfb293c36e5a95d32c37055ea49e8974da67902aa3f291e7",
-            "config_file": {
-              "path": "mlabchain_data\\demo\\config.json"
-            },
-            "model_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_36379b50cbb2.pkl",
-              "sha256": "5bc73bc820c5612b7c84687a5a63326525106208a874bad31670354c37d9040a",
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_c6ad7e0f52a7.pkl",
+              "sha256": "c107187f1a0646256a38531f63d0e3b3f1333cb41fd6c5e2f623e54bc8d40dfd",
               "size_bytes": 88
             },
             "arch_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_36379b50cbb2.txt",
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_c6ad7e0f52a7.txt",
+              "sha256": "bd87d35baf2369a3ad07b6c995b14c3e84d7d211ef848f60bab326cef8556f19",
+              "size_bytes": 112,
+              "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=4\noptimizer=SGD\nlearning_rate=0.01\nepochs=10\n"
+            },
+            "training": {
+              "n_train": 320,
+              "n_test": 80,
+              "epochs": 10,
+              "learning_rate": 0.01,
+              "wall_time_seconds": 0.004183599958196282
+            },
+            "metrics": {
+              "mse_train": 0.010224422418555366,
+              "mse_test": 0.014633706301415614,
+              "var_test": 1.07765716369605,
+              "nmse_model": 0.013579185286743947,
+              "nmse_baseline": 1.0,
+              "r2_test": 0.986420814713256
+            },
+            "lswu": {
+              "N": 320,
+              "t": 0.004183599958196282,
+              "I": 73.64212056051727,
+              "D": 0.0031948908965192886,
+              "T": 6.972423517895771e-05,
+              "Q": 0.9998156397219278,
+              "D_pow": 0.42234601887127504,
+              "T_pow": 0.056625901312582945,
+              "Q_pow": 0.9998156397219278,
+              "LSWU": 0.02391131487484306,
+              "N0": 100000.0,
+              "t0": 60.0,
+              "eta": 2.0,
+              "w_N": 0.15,
+              "w_t": 0.3,
+              "w_Q": 1.0
+            },
+            "symbolic_costs": {
+              "n_train": 320,
+              "epochs": 10,
+              "n_features": 4,
+              "ops_per_sample": 16,
+              "C_train_ops": 51200,
+              "C_verify_ops": 51200,
+              "reported_wall_time_seconds": 0.004183599958196282,
+              "hardware_seconds_per_op": 8.171093668352114e-08
+            },
+            "notes": "Demo training 1",
+            "tags": [
+              "demo"
+            ],
+            "recorded_at": "2026-09-29T08:56:48.479689+00:00"
+          },
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2aO0jD+a8ezpPErG5/Hl\nlQJpIXsl4O/p9z4Px5QDveCDG2qvvtHDi9bkFcZsmFbahpRnNa5B497Uaqwh5XJT\nxohXdpVvqGO1d61k0Hqgl1PKZ/YYE0VX4mfhwWP0WMZn583hMk3g7SnDFr37Z3FD\nOA7dfoO+e58UxMDBxGuEXxHsxMfEu+SjH3pT7aQDiSBPU9jt9NDNOHjgs40qj2Bb\nwzSQA3FvyDpA4SbNbyrM/OfLzmlN03o7mmoCfNVexm6f3E4oeGenWuJBGJ2ePlpe\nn04/Ff6GRHbQ2wd+8BqlsrlXkS7y1YJi0WXomCCppSOhc4wsJ2A4unxPdu1wtHso\n1wIDAQAB\n-----END PUBLIC KEY-----\n",
+          "nonce": "bc3bd4fbdc86df558b4c9607dfd4acbc",
+          "signature": "SRUCSQc4v8nhOFf3+0mu43nAfis2ZsPquP+7i7rZ1qMZBZvw67PRX/4WDViqfB8iS4XDy+OcKGgOZM91U1XikNSDdABz8MTjv7RIxG140KJt6K1hm8leUdg79EGe/VMgSgghWPQM3vwaplwSjVBrop0jKNSKE4KYpy5MuQUFBm+OebGAv7Vs9vtpvXhWmmIlsCvLKk1aw4htgSFPZG+3Adm1tP59lshapYdl8YZiuQaB3dSKcAqgmrwNae1W5IWx8w0FMzeZbPlsrZi/QxtULXVj153nrChBWnj6blT/lmJj3TPWZodaxmgrNA3BygMpUZG5K6Yvh9kFLiIPTxEaUQ=="
+        }
+      ],
+      "difficulty": 3,
+      "nonce": 3101,
+      "block_hash": "000d8f2d75fec23773b9244276ad0139f4b5ef10bd29984d8c1dea9024c9c759"
+    },
+    {
+      "index": 2,
+      "timestamp": "2026-09-29T08:56:48.511001+00:00",
+      "previous_hash": "000d8f2d75fec23773b9244276ad0139f4b5ef10bd29984d8c1dea9024c9c759",
+      "merkle_root": "a5fb87979686687924c8a70f01b646809fd439264786b7ef5db1df246738aa77",
+      "transactions": [
+        {
+          "tx_type": "ML_TRAINING",
+          "sender": "ML-7f02216fe15261a34659",
+          "timestamp": "2026-09-29T08:56:48.511001+00:00",
+          "payload": {
+            "schema_version": 2,
+            "kind": "ml-training",
+            "challenge": {
+              "challenge_id": "MLC-DEMO-LINEAR-001",
+              "manifest_sha256": "f87c7fe94bbfa165621a76b4b8fcd784f633f82c3f11706f3b5f4f4e9b4ebe09",
+              "dataset_sha256": "e166c16c75c1541423df95ccdf22627f1b9edc8aab21711b2b49d75d8a702950",
+              "split_rule": "first_fraction",
+              "train_fraction": 0.8,
+              "metric": "NMSE",
+              "baseline_kind": "mean_predictor",
+              "baseline_nmse": 1.0
+            },
+            "config": {
+              "model_type": "linear-regression",
+              "framework": "mlabchain-native",
+              "seed": 2,
+              "learning_rate": 0.01,
+              "epochs": 30
+            },
+            "config_sha256": "9e67f41b2cd5dc91db263367232a0f518ea3cddad983d79db563717dad7d8669",
+            "model_file": {
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_9e67f41b2cd5.pkl",
+              "sha256": "0c4a4745474daecc0193fce4ccfd20e23852175824bad96c0a623f4062a0fe3d",
+              "size_bytes": 88
+            },
+            "arch_file": {
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_9e67f41b2cd5.txt",
               "sha256": "7140506fc2c6460abe425a57c700b283a005f81557527cfebfd839981ee0a9c4",
               "size_bytes": 112,
               "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=4\noptimizer=SGD\nlearning_rate=0.01\nepochs=30\n"
@@ -128,113 +160,182 @@
               "n_test": 80,
               "epochs": 30,
               "learning_rate": 0.01,
-              "wall_time_seconds": 0.012373100034892559
+              "wall_time_seconds": 0.01221320009790361
             },
             "metrics": {
-              "mse_train": 0.010054628471808807,
-              "mse_test": 0.009108072702788666,
-              "r2_test": 0.9966180782098798
+              "mse_train": 0.01022442241857255,
+              "mse_test": 0.014633706301456394,
+              "var_test": 1.07765716369605,
+              "nmse_model": 0.013579185286781788,
+              "nmse_baseline": 1.0,
+              "r2_test": 0.9864208147132182
+            },
+            "lswu": {
+              "N": 320,
+              "t": 0.01221320009790361,
+              "I": 73.64212056031205,
+              "D": 0.0031948908965192886,
+              "T": 0.00020353262079595758,
+              "Q": 0.9998156397219267,
+              "D_pow": 0.42234601887127504,
+              "T_pow": 0.07808906223489462,
+              "Q_pow": 0.9998156397219267,
+              "LSWU": 0.032974524238872684,
+              "N0": 100000.0,
+              "t0": 60.0,
+              "eta": 2.0,
+              "w_N": 0.15,
+              "w_t": 0.3,
+              "w_Q": 1.0
+            },
+            "symbolic_costs": {
+              "n_train": 320,
+              "epochs": 30,
+              "n_features": 4,
+              "ops_per_sample": 16,
+              "C_train_ops": 153600,
+              "C_verify_ops": 153600,
+              "reported_wall_time_seconds": 0.01221320009790361,
+              "hardware_seconds_per_op": 7.951302147072662e-08
             },
             "notes": "Demo training 2",
             "tags": [
-              "demo",
-              "linear-regression"
+              "demo"
             ],
-            "recorded_at": "2026-09-29T07:11:33.625738+00:00"
+            "recorded_at": "2026-09-29T08:56:48.511001+00:00"
           },
-          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwS5N+OL2HRgSx+4tc9Zu\np/50i4gw2kSs21saN9uEWgW9kGC2R/iClkp2TI+Pc5EWXyMBTeSjjXtJNaabggE+\nHRffdteB0eMcc0L6gFGJU0lYHx0o18bQEWyP6EDlBvCYyGDFJmaUEibep30Ji9y9\n00hm65PUdX8E/GYf5RFUJRaPk+t7X1B+zIWQBqfE/QDRgGXCBcemh7b2yrEfR81p\nXn1KkxYfzMJl4csqnlCDDSeXXo1+QCNVubu9RKq47f9tgZbt66n/z2P6y7doH/FQ\n58qObNhBXXg+ct7BY4kC+sjZkkXm6hizAxlDN1q6oRM2uK1ZJkbzcVxlMWZEurCj\n6QIDAQAB\n-----END PUBLIC KEY-----\n",
-          "nonce": "3a4513e89d8c8a570acf54710202f076",
-          "signature": "K/6X4RrGwdb3hu96HPTtaqooo6ciFmHarqGshIktLWiC/ndfWrO4RcQFwen3oM97Pmfe0nrPRFkFAaelwe2vxewOUMuZmPUz2HP5zGXVVN1LaVvrbwcxxfq6JZWJh5ofEVm62Sj6dsKbHmiPGWel1ajrsoWjCC5Hp2aAz0DliiFiYh+Lp5rurSXHFwtB0o2b0JI1UNqiLG/3wCVNsBbWiVcnkG+WjJWidKUOAtT/eutrW6N9W3OLBaCWc5RuUGmP6Rkew3lscD72Utiak5u2rWBG0GKHShPgszAnhO1QCLxc25aCi6DerAdfqU3JYogJQM/omdCLja76cjrLUYTSKA=="
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2aO0jD+a8ezpPErG5/Hl\nlQJpIXsl4O/p9z4Px5QDveCDG2qvvtHDi9bkFcZsmFbahpRnNa5B497Uaqwh5XJT\nxohXdpVvqGO1d61k0Hqgl1PKZ/YYE0VX4mfhwWP0WMZn583hMk3g7SnDFr37Z3FD\nOA7dfoO+e58UxMDBxGuEXxHsxMfEu+SjH3pT7aQDiSBPU9jt9NDNOHjgs40qj2Bb\nwzSQA3FvyDpA4SbNbyrM/OfLzmlN03o7mmoCfNVexm6f3E4oeGenWuJBGJ2ePlpe\nn04/Ff6GRHbQ2wd+8BqlsrlXkS7y1YJi0WXomCCppSOhc4wsJ2A4unxPdu1wtHso\n1wIDAQAB\n-----END PUBLIC KEY-----\n",
+          "nonce": "9b4178e284cd42ddb89eff2cf8d4919e",
+          "signature": "mrObeGdHq2H96McnoKzjOu9jEG1TQY/hv/5iZylukhjBNH+XDLfkrFkTP6Gcj67oyY5YnEvYp6ZWmTaCaHtH5TJRlANLSwZvfPy0+RxfBAJrmzBKM9H1XY0BGiTD8FxnMC97lZZUvTvDpbnkEl3AwsTPFkedesSSwVlPhK/f63aLaPqClLkrk7XhhzU52VibS69LEMIZyrJPqG97I1Kx+xt2jmxNu/tPA1STuNUHEIMcypJR/7+ev7odjaCpYqEhvjdT3/6yzZDbjt+mhI9/ZvWiTj+cyhLJ/W7/JCNYGnKyRNQtS00Ib5Th0HtWOrJRQb7cRMePY2pOCfLaIVW0Uw=="
         }
       ],
       "difficulty": 3,
-      "nonce": 6949,
-      "block_hash": "00046a9d7f2db8a93a28e617cf75110283ceb4e306a93371f106b23666b27329"
+      "nonce": 1338,
+      "block_hash": "000bfaa443243cd0c88c667ccf9776d5f49b9c2cb1756c749bc3ae820efd1185"
     },
     {
       "index": 3,
-      "timestamp": "2026-09-29T07:11:33.698709+00:00",
-      "previous_hash": "00046a9d7f2db8a93a28e617cf75110283ceb4e306a93371f106b23666b27329",
-      "merkle_root": "36131ddc385e6d86c9078469dead00d10f935df148053abf1c31aaa8fdd2936f",
+      "timestamp": "2026-09-29T08:56:48.562641+00:00",
+      "previous_hash": "000bfaa443243cd0c88c667ccf9776d5f49b9c2cb1756c749bc3ae820efd1185",
+      "merkle_root": "35e7e893f69d3a61a507cb425c615dd787f9a20bb7fc03abf9e7809087148ff8",
       "transactions": [
         {
           "tx_type": "ML_TRAINING",
-          "sender": "ML-fe13bb70a093258f246a",
-          "timestamp": "2026-09-29T07:11:33.698709+00:00",
+          "sender": "ML-7f02216fe15261a34659",
+          "timestamp": "2026-09-29T08:56:48.562641+00:00",
           "payload": {
-            "schema_version": 1,
+            "schema_version": 2,
             "kind": "ml-training",
-            "framework": "mlabchain-native",
-            "model_type": "linear-regression",
+            "challenge": {
+              "challenge_id": "MLC-DEMO-LINEAR-001",
+              "manifest_sha256": "f87c7fe94bbfa165621a76b4b8fcd784f633f82c3f11706f3b5f4f4e9b4ebe09",
+              "dataset_sha256": "e166c16c75c1541423df95ccdf22627f1b9edc8aab21711b2b49d75d8a702950",
+              "split_rule": "first_fraction",
+              "train_fraction": 0.8,
+              "metric": "NMSE",
+              "baseline_kind": "mean_predictor",
+              "baseline_nmse": 1.0
+            },
             "config": {
               "model_type": "linear-regression",
               "framework": "mlabchain-native",
-              "n_samples": 500,
-              "n_features": 5,
               "seed": 3,
-              "noise": 0.1,
               "learning_rate": 0.01,
-              "epochs": 35,
-              "train_fraction": 0.8
+              "epochs": 60
             },
-            "config_sha256": "b612ca54a6fad70b7c63e43dd55e2763268002291121e654fe0f7a7b5b6ef91a",
-            "config_file": {
-              "path": "mlabchain_data\\demo\\config.json"
-            },
+            "config_sha256": "928ab358b162f89c5a413fe0673e14202ddcc326ab822c4e499d32852e384641",
             "model_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_b612ca54a6fa.pkl",
-              "sha256": "a868551fe76d8aa2bb1e9726fd933476d74dcc6d7476e2b3bf67224013361fca",
-              "size_bytes": 97
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_928ab358b162.pkl",
+              "sha256": "0c4a4745474daecc0193fce4ccfd20e23852175824bad96c0a623f4062a0fe3d",
+              "size_bytes": 88
             },
             "arch_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\demo\\model_b612ca54a6fa.txt",
-              "sha256": "0f5b426877749946d0ccbef043ba9a99edc59fc5658b4836976d48b1704639dc",
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\demo\\model_928ab358b162.txt",
+              "sha256": "a0dddbcb55b7c278c707121fa9bd1fb8bbf53e381be0e612e7d97112833a5082",
               "size_bytes": 112,
-              "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=5\noptimizer=SGD\nlearning_rate=0.01\nepochs=35\n"
+              "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=4\noptimizer=SGD\nlearning_rate=0.01\nepochs=60\n"
             },
             "training": {
-              "n_train": 400,
-              "n_test": 100,
-              "epochs": 35,
+              "n_train": 320,
+              "n_test": 80,
+              "epochs": 60,
               "learning_rate": 0.01,
-              "wall_time_seconds": 0.020019100047647953
+              "wall_time_seconds": 0.02505909977480769
             },
             "metrics": {
-              "mse_train": 0.010933367328502032,
-              "mse_test": 0.012259520510622807,
-              "r2_test": 0.9754298066904296
+              "mse_train": 0.01022442241857255,
+              "mse_test": 0.014633706301456394,
+              "var_test": 1.07765716369605,
+              "nmse_model": 0.013579185286781788,
+              "nmse_baseline": 1.0,
+              "r2_test": 0.9864208147132182
+            },
+            "lswu": {
+              "N": 320,
+              "t": 0.02505909977480769,
+              "I": 73.64212056031205,
+              "D": 0.0031948908965192886,
+              "T": 0.00041756447073421456,
+              "Q": 0.9998156397219267,
+              "D_pow": 0.42234601887127504,
+              "T_pow": 0.09687619252950253,
+              "Q_pow": 0.9998156397219267,
+              "LSWU": 0.04090773108690653,
+              "N0": 100000.0,
+              "t0": 60.0,
+              "eta": 2.0,
+              "w_N": 0.15,
+              "w_t": 0.3,
+              "w_Q": 1.0
+            },
+            "symbolic_costs": {
+              "n_train": 320,
+              "epochs": 60,
+              "n_features": 4,
+              "ops_per_sample": 16,
+              "C_train_ops": 307200,
+              "C_verify_ops": 307200,
+              "reported_wall_time_seconds": 0.02505909977480769,
+              "hardware_seconds_per_op": 8.157259041278546e-08
             },
             "notes": "Demo training 3",
             "tags": [
-              "demo",
-              "linear-regression"
+              "demo"
             ],
-            "recorded_at": "2026-09-29T07:11:33.698709+00:00"
+            "recorded_at": "2026-09-29T08:56:48.562641+00:00"
           },
-          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwS5N+OL2HRgSx+4tc9Zu\np/50i4gw2kSs21saN9uEWgW9kGC2R/iClkp2TI+Pc5EWXyMBTeSjjXtJNaabggE+\nHRffdteB0eMcc0L6gFGJU0lYHx0o18bQEWyP6EDlBvCYyGDFJmaUEibep30Ji9y9\n00hm65PUdX8E/GYf5RFUJRaPk+t7X1B+zIWQBqfE/QDRgGXCBcemh7b2yrEfR81p\nXn1KkxYfzMJl4csqnlCDDSeXXo1+QCNVubu9RKq47f9tgZbt66n/z2P6y7doH/FQ\n58qObNhBXXg+ct7BY4kC+sjZkkXm6hizAxlDN1q6oRM2uK1ZJkbzcVxlMWZEurCj\n6QIDAQAB\n-----END PUBLIC KEY-----\n",
-          "nonce": "6603880853d7f23a6c40b4cca190efd3",
-          "signature": "YBhEYcKqlTQR0memJjZhL+UkcBmVwbKC5wPgoLwGpuGa6HDyX9cggSlOg31pCQWml0/2VFeR8e4zQcPeBamyconl48XwdhhZyIr2kx32StMwYSyloZhErtkDNn55RWEEdnvdAq3Q/8qIfZei4T8fG4f76P/5pbD+3xpBvAmqkSHLwAdTIGQ8wAxuwHiwe/8lud/vq8MOV89GyAWLYSAWCTv+AbbIJkyBC4rlJKn24Nm1DXn/+YluH9lUQicBhU/8/lZrous+3TOLOPCCzXQGmdziYvOz5jPDKJghB33lyKTLVBUvVCQktj5rZaw11im52pY8d5Lt5JKc8cO4pQtEKA=="
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2aO0jD+a8ezpPErG5/Hl\nlQJpIXsl4O/p9z4Px5QDveCDG2qvvtHDi9bkFcZsmFbahpRnNa5B497Uaqwh5XJT\nxohXdpVvqGO1d61k0Hqgl1PKZ/YYE0VX4mfhwWP0WMZn583hMk3g7SnDFr37Z3FD\nOA7dfoO+e58UxMDBxGuEXxHsxMfEu+SjH3pT7aQDiSBPU9jt9NDNOHjgs40qj2Bb\nwzSQA3FvyDpA4SbNbyrM/OfLzmlN03o7mmoCfNVexm6f3E4oeGenWuJBGJ2ePlpe\nn04/Ff6GRHbQ2wd+8BqlsrlXkS7y1YJi0WXomCCppSOhc4wsJ2A4unxPdu1wtHso\n1wIDAQAB\n-----END PUBLIC KEY-----\n",
+          "nonce": "ce9973f775e483dbead94587add369d0",
+          "signature": "inESVGyplPat2NyfSgIWkxwEMu/X4b9PVDw7sTrXt7roo7h79+9zj5r5jhSBQQWiZ75Ji25vhwu56zyXff6m8N3f1zqbfWS8O4KYAWvZxxYZ8RYXYmZ6hRAB6Rb42fFQdxP2THttSgqrx9ACYE6HOAnYh2eSLNclEzblgku/0qa+ex0+FhTpal5YaWlCZH6lVrdM6tN4Noqa/siMLmn44Ukcs+kaIoQo2VXdv2B1VDKA8jZ7wv/bos8Gb7jfpWf+9bzZzO9Ql2Qjf9uG20nyik2XGc95QG6ya47zRiiF18uokG06HD1IF3Odau704rKH4/OwqJr90CFUYKZc3XTZYg=="
         }
       ],
       "difficulty": 3,
-      "nonce": 7106,
-      "block_hash": "00037681f79a9b0e44322ae37eef9456f913709e2ed8982653dc1e23e4a5e38f"
+      "nonce": 515,
+      "block_hash": "000d653b87088e9fdf36b3a08add5128e9880cf3e05cac374b21ce43510c7f71"
     },
     {
       "index": 4,
-      "timestamp": "2026-09-29T07:16:39.340086+00:00",
-      "previous_hash": "00037681f79a9b0e44322ae37eef9456f913709e2ed8982653dc1e23e4a5e38f",
-      "merkle_root": "9bc8e9f139d787b3a7727782b9cbd0c18789d9500f44146be4358225e7215548",
+      "timestamp": "2026-09-29T09:00:30.354103+00:00",
+      "previous_hash": "000d653b87088e9fdf36b3a08add5128e9880cf3e05cac374b21ce43510c7f71",
+      "merkle_root": "9d865d8716e751ae8a21fc2e5064d6100cca7ab198faeaf5d1fb0f6b84df533e",
       "transactions": [
         {
           "tx_type": "ML_TRAINING",
-          "sender": "ML-46ab33aee0c724d47d2e",
-          "timestamp": "2026-09-29T07:16:39.340086+00:00",
+          "sender": "ML-a25a60c156f642a268fe",
+          "timestamp": "2026-09-29T09:00:30.346287+00:00",
           "payload": {
-            "schema_version": 1,
+            "schema_version": 2,
             "kind": "ml-training",
-            "framework": "mlabchain-native",
-            "model_type": "linear-regression",
+            "challenge": {
+              "challenge_id": "MLC-LINEAR-001",
+              "manifest_sha256": "ae6bb3556e7f1f6fb946b4497a86256daf0daf5db543004d7d62feea8816a6dd",
+              "dataset_sha256": "fb1ef0bf668368ee692d5a0ecdd2aaa285a17be8ffa4c375cd858e053933b81c",
+              "split_rule": "first_fraction",
+              "train_fraction": 0.8,
+              "metric": "NMSE",
+              "baseline_kind": "mean_predictor",
+              "baseline_nmse": 1.0
+            },
             "config": {
               "model_type": "linear-regression",
               "framework": "mlabchain-native",
@@ -247,16 +348,13 @@
               "train_fraction": 0.8
             },
             "config_sha256": "b0f0ec6f5b3fb27a89e4df7c1c1125a80c79aa831293af08775f9b7bbd008b23",
-            "config_file": {
-              "path": "mlabchain_data\\models\\config.json"
-            },
             "model_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\models\\model_b0f0ec6f5b3f.pkl",
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\models\\model_b0f0ec6f5b3f.pkl",
               "sha256": "ea9b9b7835ad78a0f397d0f6608c66a683253ee333bcacc7e1ae14f8be3ece62",
               "size_bytes": 88
             },
             "arch_file": {
-              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain\\mlabchain_data\\models\\model_b0f0ec6f5b3f.txt",
+              "path": "C:\\Users\\Ali\\Documents\\github_alibavarchiee\\labchain\\MLabChain_V2\\mlabchain_data\\models\\model_b0f0ec6f5b3f.txt",
               "sha256": "7140506fc2c6460abe425a57c700b283a005f81557527cfebfd839981ee0a9c4",
               "size_bytes": 112,
               "text": "model_type=linear-regression\nframework=mlabchain-native\nn_features=4\noptimizer=SGD\nlearning_rate=0.01\nepochs=30\n"
@@ -266,25 +364,56 @@
               "n_test": 80,
               "epochs": 30,
               "learning_rate": 0.01,
-              "wall_time_seconds": 0.012232600012794137
+              "wall_time_seconds": 0.012393899960443377
             },
             "metrics": {
               "mse_train": 0.01169119899240845,
               "mse_test": 0.008721372593626254,
+              "var_test": 1.3765881499320982,
+              "nmse_model": 0.00633549881571801,
+              "nmse_baseline": 1.0,
               "r2_test": 0.993664501184282
+            },
+            "lswu": {
+              "N": 320,
+              "t": 0.012393899960443377,
+              "I": 157.8407681995074,
+              "D": 0.0031948908965192886,
+              "T": 0.00020654366772884634,
+              "Q": 0.9999598630657942,
+              "D_pow": 0.42234601887127504,
+              "T_pow": 0.07843385580625387,
+              "Q_pow": 0.9999598630657942,
+              "LSWU": 0.033124897159311634,
+              "N0": 100000.0,
+              "t0": 60.0,
+              "eta": 2.0,
+              "w_N": 0.15,
+              "w_t": 0.3,
+              "w_Q": 1.0
+            },
+            "symbolic_costs": {
+              "n_train": 320,
+              "epochs": 30,
+              "n_features": 4,
+              "ops_per_sample": 16,
+              "C_train_ops": 153600,
+              "C_verify_ops": 153600,
+              "reported_wall_time_seconds": 0.012393899960443377,
+              "hardware_seconds_per_op": 8.068945286746991e-08
             },
             "notes": "",
             "tags": [],
-            "recorded_at": "2026-09-29T07:16:39.340086+00:00"
+            "recorded_at": "2026-09-29T09:00:30.346287+00:00"
           },
-          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyoicAuLR8V1UTLvcJ4v4\nTZpEyOqdGadJfy5D/QxNyPz4r7GZ13l4Q18SxQfwkWTfhi6vKpAuMjGLlAcfmGX3\n0b1L1uVAGTcSyKsASTJSOi3MoY4UyEEdgzTC1DDLedE3W5h0rUlZ3DaBh8VwxBze\nX8lRrJUxFG/Pi/dCp2RKvkM2dugnhWH4QRgVu588rdO4uynW+6t0yP+BLKJ845tm\nLwjNAAlHoJhWlnmoM65oxW4u1i7EIaXpydWAWMMlC9nCB9nEXr/bH5jtCNQP8fUM\nhOE5oiWqOe+hwP4GmaLzJ5gBBuQkjpgIEz9y1DqLbvZ/RZDWp9vM7SRp7D1McbVZ\nJwIDAQAB\n-----END PUBLIC KEY-----\n",
-          "nonce": "26c9d6a5d7c0b9083bf1b31a25df2f1a",
-          "signature": "EBuln9SYNAT7QAq4zDMqogBWG/yz8aOICxtpgtqEiTMKa3nJNdi26a+2/SWG+BlocpT/xz5IazKCZOglUkyERiepBzunJAEGa5gAX4QmSU8UOYjt51pJjZ1+9WGIn3oAEOLtcO8mS28NCqgIz30sRvrB6/URQMmMKI80vSf0JaIZC3oRWHXDjtdKAbxwMJVvsa0KE4+6B4FpbwK5ETbFa04ps9FHOrPRDiYetUUNrDYjzTfDXgt9ujXpcJcYabHG5aMny2osyZJam4J5hrFp1bW7xyC0UsZ0DNfpXNJeExpxHwsHxkZSQIgNRaswVkSgU0DHe/rJ4NOouD6S1JG9+Q=="
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1kb5o0Z7UBTu465i134M\nRh5V81uHmBgI45VvU8Im1ovxVv2Ztsn7uMdnZrv3F/dAIos9RfgB1GEFYjPQs7Z9\nPoIQOgXSjJz2Kt4sPRxxZj+SgR/G9JuWd3PhK6tm5cITLbDLMbKID44cHmPtXyaO\nXmPxOLANYhn1uhKN2Oxh+S00ShpM6iPWK2/njT9m+D3xZ985HWxv6/Dyx35HWxrk\nG051dSXCTCD271LVgywXKZyPukDNr0lg+PVfKZHTGstxjaFeyt9qPYO5jkmp8CCX\nEShogMFvinEHKvQzx8aTuekHNaxT0T2+f/K2DKaVUgu02XBluwDiKPKwzjGGtPJr\ncwIDAQAB\n-----END PUBLIC KEY-----\n",
+          "nonce": "67d10bdc09a1ea81d73add8d437c66aa",
+          "signature": "Bkw1gjaZ7IevntxMyd6OT8jNJPXC+XkmmahlBOFqYXebSnIKZotDFhyMaDUBfcfLxKAz3d+GiZAGGl4uiNF+Aa4fKGJFjj6QFTJkmO213tPBDvSGXCa/vEquuzw8nGyKLfDeAqCQLbaC29PAIKON7MxLKK5ghtwWMe/RGNLnGNv9jZ/0zqTLuMS0eSVZNfnenlJiRgQ065PE64ftuJp9EkWVx7l0pnNMQci8PmBvnxo4T8HsoDQTEuyvyaSmMC5V7UudvBWRDOBOmG2yJt0aMZX+bGCfis7c1C3bniIZbHR+gDHbCTjVgfFyJ5vyP5eMwGio6+CAa1p44qoDz3oa9g=="
         }
       ],
       "difficulty": 3,
-      "nonce": 269,
-      "block_hash": "00069dde36e82ebe4c1567d5f393e4b21fcc3b670a9fbc24a142371f000b9995"
+      "nonce": 107,
+      "block_hash": "000c3844c6020c4397f6b3029dc0836289d915fa5cf1339ed8d55866a8e16c7f"
     }
   ],
   "pending_transactions": []
