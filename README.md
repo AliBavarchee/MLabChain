@@ -1,7 +1,12 @@
-# MLabChain
----
+<h1 align="center"># MLabChain</h1>
 ![Logo](matterials/mlabchain_ascii.png)
+
 ---
+<p align="center">
+  <img src="matterials/mlabchain.png" alt="MLabChain" width="222"/>
+</p>
+---
+
 
 ## 1. Overview
 
