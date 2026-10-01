@@ -1,8 +1,8 @@
 <h1 align="center">MLabChain</h1>
 <p align="center">
-  <img src="matterials/mlabchain_ascii.png" alt="MLabChain" width="450"/>
+  <img src="matterials/mlabchain_ascii.png" alt="MLabChain" width="477"/>
 </p>
-----
+
 
 ## 1. Overview
 
