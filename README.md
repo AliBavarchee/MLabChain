@@ -1,10 +1,8 @@
-<h1 align="center"># MLabChain</h1>
----
+<h1 align="center">MLabChain</h1>
 <p align="center">
-  <img src="matterials/mlabchain_ascii.png" alt="MLabChain" width="260"/>
+  <img src="matterials/mlabchain_ascii.png" alt="MLabChain" width="450"/>
 </p>
----
-
+----
 
 ## 1. Overview
 
