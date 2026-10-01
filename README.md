@@ -1,4 +1,7 @@
 # MLabChain
+---
+![Logo](matterials/mlabchain_ascii.png)
+---
 
 ## 1. Overview
 
@@ -7,7 +10,7 @@ MLabChain is a local, single-file, single-writer ledger for machine-learning exp
 The novelty, such as it is, is not the blockchain. The chain, the Merkle tree, the RSA signatures, and the hash-based block sealing are all standard, and the project does not claim otherwise. What is specific to MLabChain is the accounting layer: a documented definition of *scientific computational work* that can be recorded, audited by re-execution, and compared across runs on different hardware, without appealing to FLOPS, GPU-hours, or any other hardware-specific quantity.
 
 The project runs on a laptop, requires only `cryptography` beyond the standard library, and produces a record that a reader can inspect with `cat` and a verifier can re-derive with `python mlabchain.py verify-ml`.
-
+----
 ## 2. Motivation
 
 Machine-learning experiments have a provenance problem that is structurally similar to the one HEPLabChain addresses for physics analyses. A trained model is a binary artifact. The configuration that produced it, the dataset it was trained on, and the metric it achieved are all recorded — if at all — in scattered notebooks, ad-hoc CSV logs, or the analyst's memory. Six months later, nobody can say which config produced which checkpoint, or whether the model that is currently deployed is the one that was validated.
