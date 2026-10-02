@@ -409,7 +409,7 @@ to type, and not already taken by another scientific unit. It is used
 in the sense of "one measure of verified training work," the same way
 "joule" means one measure of energy.
 
-It is not a ticker symbol, not an asset, and not something that trades
+Mera 0.1.7 is not a ticker symbol, not an asset, and not something that trades
 anywhere. If you find a project elsewhere that uses a similar name for
 a financial instrument, it is not this project and it has nothing to do
 with this project.
