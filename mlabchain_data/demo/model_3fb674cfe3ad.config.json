@@ -1,11 +1,11 @@
 {
   "model_type": "linear-regression",
   "framework": "mlabchain-native",
-  "n_samples": 400,
-  "n_features": 4,
-  "seed": 42,
+  "n_samples": 300,
+  "n_features": 3,
+  "seed": 1,
   "noise": 0.1,
   "learning_rate": 0.01,
-  "epochs": 30,
+  "epochs": 25,
   "train_fraction": 0.8
 }
