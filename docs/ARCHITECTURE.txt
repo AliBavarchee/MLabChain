@@ -1,0 +1,37 @@
+MERA / MLABCHAIN v0.2
+
+  ML DATASET + CONFIG
+          |
+          v
+  +---------------------+
+  | Python ML layer     |
+  | deterministic train |
+  | artifact hashing     |
+  | LSWU audit metric    |
+  | encrypted wallet    |
+  +----------+----------+
+             |
+             | signed ML_WORK / TRANSFER
+             v
+  +---------------------+
+  | C++ state core      |
+  | Ed25519 verify      |
+  | account nonce       |
+  | balances            |
+  | fixed-point reward  |
+  | SQLite state        |
+  | Merkle + SHA-256    |
+  | block PoW seal      |
+  +----------+----------+
+             |
+             v
+       Mera native state
+             |
+             +------------------> optional ERC-20 representation
+
+Monetary issuance:
+  quality_ppm = clamp((baseline_scaled - nmse_scaled)*1e6/baseline_scaled, 0, 1e6)
+  reward_atomic = min(50 MERA,
+                      ops * quality_ppm * 1e8 / (1e7 * 1e6))
+
+Wall time is recorded for provenance but is NOT a minting input.
