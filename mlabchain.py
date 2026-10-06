@@ -1,156 +1,86 @@
 #!/usr/bin/env python3
 # Copyright 2026 Ali Bavarchee
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 """
-MLabChain --VER == 0.0.9
-=========
+MLabChain + Mera v0.2
+=====================
 
-Proof-of-Training blockchain for machine-learning experiments.
+Python remains the scientific/ML layer. The C++ core is authoritative for:
+  * Ed25519 signature verification
+  * account nonces and balances
+  * Merkle roots / block hashes / PoW sealing
+  * deterministic integer reward accounting
+  * maximum-supply enforcement
+  * persistent SQLite state
 
-The idea
---------
-Bitcoin's "work" is a SHA-256 hash with leading zeros. It is deliberately
-meaningless: a hash is a hash, nobody wants it, and that uselessness is
-what makes the system trustless. MLabChain asks what happens if we replace
-that meaningless work with *training an ML model*. Mining a block then
-requires producing a real artifact — a model — and the block's proof is
-the training metadata: config, model hash, architecture, training-set
-size, wall time, validation MSE, and a model metric.
+The important monetary rule is deliberately different from ordinary PoW:
+Mera issuance is tied to a signed, reproducible ML-work certificate. Reported
+wall time is retained as an audit metric, but is NOT used to mint Mera.
 
-The consequence, stated plainly
--------------------------------
-In Bitcoin, verification is O(1): one hash, one check. In MLabChain,
-verification means **re-training with the same config and checking that
-the outputs match**. Verification cost therefore scales with training
-cost:
-
-    verification cost  ≈  computation cost
-
-This is the property the whole design is built around. It is also the
-property that makes the scheme unsuitable as a production blockchain:
-a decentralized network needs cheap verification, and cheap verification
-is exactly what useful mining destroys. MLabChain is a demonstration of
-that trade-off, not a proposal for a currency.
-
-What this is *not*
-------------------
-  * Not a tradeable coin. No network, no exchange, no liquidity, no
-    consensus. The "credit" the chain accumulates is a local, non-
-    transferable counter equal to the training work it records.
-  * Not a claim that ML training is verifiable in general. Real training
-    is non-deterministic (random seeds, GPU scheduling, framework
-    versions). MLabChain's demo training is deterministic on purpose,
-    so verification is exact. The docstring of ``run_training`` marks
-    this assumption clearly.
-  * Not a replacement for MLOps tooling, model registries, or the
-    academic literature on proof-of-learning.
-
-What it does do
----------------
-  * Trains a small linear-regression model deterministically from a
-    ``config.json``.
-  * Saves the model to ``model.pkl`` and the architecture description
-    to ``model.txt``.
-  * Records the training as a signed transaction: config content, model
-    hash, arch hash, training-set size, wall time, MSE on train and
-    test, R^2 on test.
-  * Mines those transactions into a block with the same PoW / Merkle /
-    RSA machinery used elsewhere in the LabChain family.
-  * Lets anyone re-run the training and check the metrics, measuring
-    the verification cost and comparing it to the reported training cost.
-
-Examples
---------
-    python mlabchain.py demo
-    python mlabchain.py create-wallet
-
-    python mlabchain.py mine --config config.json
-    python mlabchain.py mine --config config.json --output-dir models/
-
-    python mlabchain.py verify-ml --model models/model_ab12cd.pkl
-    python mlabchain.py status
-    python mlabchain.py validate
-    python mlabchain.py credits
+This build is a reference devnet/testnet implementation, not an exchange-
+ready public L1. See README.md for the remaining hard problems, especially
+fully decentralized verification of arbitrary ML training.
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
-import copy
+import getpass
 import hashlib
 import json
+import math
+import os
 import pickle
 import random
 import secrets
+import subprocess
 import sys
 import time
-
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-try:
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import padding, rsa
-except ImportError:
-    print(
-        "\nERROR: The 'cryptography' package is required.\n"
-        "Install it with:\n\n"
-        "    pip install cryptography\n"
-    )
-    sys.exit(1)
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-# Configuration
-
-DATA_DIR = Path("mlabchain_data")
-BLOCKCHAIN_FILE = DATA_DIR / "blockchain.json"
+ROOT = Path(__file__).resolve().parent
+DATA_DIR = ROOT / "mera_data"
 WALLET_FILE = DATA_DIR / "wallet.json"
+CHALLENGE_DIR = DATA_DIR / "challenges"
 MODEL_DIR = DATA_DIR / "models"
+PROOF_DIR = DATA_DIR / "proofs"
 
-DEFAULT_DIFFICULTY = 3
-GENESIS_DIFFICULTY = 0
+ATOMIC_PER_MERA = 100_000_000
+MAX_SUPPLY_ATOMIC = 100_000_000 * ATOMIC_PER_MERA
+OPS_PER_MERA = 10_000_000
+MAX_WORK_REWARD_ATOMIC = 50 * ATOMIC_PER_MERA
+DEFAULT_DIFFICULTY = 4
+MIN_FEE_ATOMIC = 1
+SCHEMA_VERSION = 3
+WALLET_KDF_ITERATIONS = 600_000
 
-SCHEMA_VERSION = 1
-MERKLE_SCHEME = "leaf-parent-v2"
+LSWU_N0 = 1e5
+LSWU_T0 = 60.0
+LSWU_ETA = 2.0
+LSWU_WN = 0.15
+LSWU_WT = 0.30
+LSWU_WQ = 1.0
 
-DEFAULT_CONFIG: Dict[str, Any] = {
+DEFAULT_CONFIG = {
     "model_type": "linear-regression",
     "framework": "mlabchain-native",
-    "n_samples": 400,
-    "n_features": 4,
-    "seed": 313,
-    "noise": 0.1,
+    "seed": 42,
     "learning_rate": 0.01,
     "epochs": 30,
-    "train_fraction": 0.8,
 }
-
-# Utilities
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def canonical_json(data: Any) -> str:
-    return json.dumps(
-        data,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def sha256_text(text: str) -> str:
@@ -161,1233 +91,573 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def ensure_data_dir() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+def ensure_dirs() -> None:
+    for p in (DATA_DIR, CHALLENGE_DIR, MODEL_DIR, PROOF_DIR):
+        p.mkdir(parents=True, exist_ok=True)
 
 
 def hash_file(path: str | Path) -> str:
-    """Streaming SHA-256 of a file, 1 MiB chunks."""
-
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(f"File not found: {p}")
-    if not p.is_file():
-        raise ValueError(f"Not a file: {p}")
-
     h = hashlib.sha256()
-    with p.open("rb") as f:
-        while True:
-            chunk = f.read(1024 * 1024)
-            if not chunk:
-                break
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def short_hash(text: str, n: int = 12) -> str:
-    return text[:n]
-
-# ML — deterministic training
-
-def synthesize_dataset(
-    n_samples: int,
-    n_features: int,
-    seed: int,
-    noise: float,
-) -> Tuple[List[List[float]], List[float]]:
-    """
-    Deterministic synthetic linear dataset.
-
-    Uses Python's Mersenne Twister via ``random.Random(seed)``. The same
-    seed on the same Python version produces the same dataset, which is
-    what makes the demo's training reproducible.
-    """
-
-    rng = random.Random(seed)
-    w_true = [rng.uniform(-1.0, 1.0) for _ in range(n_features)]
-    b_true = rng.uniform(-1.0, 1.0)
-
-    X: List[List[float]] = []
-    y: List[float] = []
-
-    for _ in range(n_samples):
-        x = [rng.gauss(0.0, 1.0) for _ in range(n_features)]
-        target = b_true + sum(w_true[j] * x[j] for j in range(n_features))
-        target += rng.gauss(0.0, noise)
-        X.append(x)
-        y.append(target)
-
-    return X, y
+def atomic_from_mera(value: str) -> int:
+    d = Decimal(value)
+    if d <= 0:
+        raise ValueError("amount must be positive")
+    q = (d * ATOMIC_PER_MERA).quantize(Decimal("1"), rounding=ROUND_DOWN)
+    return int(q)
 
 
-def train_linear_regression(
-    X: List[List[float]],
-    y: List[float],
-    n_features: int,
-    lr: float,
-    epochs: int,
-) -> Tuple[List[float], float]:
-    """
-    Vanilla SGD for linear regression in pure Python.
-
-    No shuffling, no momentum, no bias correction. Deliberately simple
-    so the training is deterministic and easy to re-run during
-    verification.
-    """
-
-    w = [0.0] * n_features
-    b = 0.0
-    n = len(X)
-
-    for _ in range(epochs):
-        for i in range(n):
-            pred = b + sum(w[j] * X[i][j] for j in range(n_features))
-            err = pred - y[i]
-            for j in range(n_features):
-                w[j] -= lr * err * X[i][j]
-            b -= lr * err
-
-    return w, b
+def mera_from_atomic(value: int) -> str:
+    return f"{Decimal(value) / Decimal(ATOMIC_PER_MERA):.8f}"
 
 
-def evaluate_mse(
-    X: List[List[float]],
-    y: List[float],
-    w: List[float],
-    b: float,
-) -> float:
-    n = len(X)
-    if n == 0:
-        return float("nan")
-    sse = 0.0
-    for i in range(n):
-        pred = b + sum(w[j] * X[i][j] for j in range(len(w)))
-        sse += (pred - y[i]) ** 2
-    return sse / n
+def core_path() -> Path:
+    override = os.environ.get("MERA_CORE_PATH")
+    if override:
+        return Path(override)
+    candidates = [ROOT / "mera_core", ROOT / "mera_core.exe", ROOT / "build" / "mera_core", ROOT / "build" / "Debug" / "mera_core.exe", ROOT / "build" / "Release" / "mera_core.exe"]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError("mera_core executable not found; build cpp/mera_core.cpp first")
 
 
-def evaluate_r2(
-    X: List[List[float]],
-    y: List[float],
-    w: List[float],
-    b: float,
-) -> float:
-    n = len(y)
-    if n == 0:
-        return float("nan")
-    mean_y = sum(y) / n
-    ss_tot = sum((yv - mean_y) ** 2 for yv in y)
-    ss_res = sum(
-        (b + sum(w[j] * X[i][j] for j in range(len(w))) - y[i]) ** 2
-        for i in range(n)
-    )
-    if ss_tot == 0.0:
-        return 1.0 if ss_res == 0.0 else 0.0
-    return 1.0 - ss_res / ss_tot
+def core(*args: str, check: bool = True) -> dict[str, str]:
+    cp = core_path()
+    env = os.environ.copy()
+    env.setdefault("MERA_NETWORK", "devnet")
+    r = subprocess.run([str(cp), *args], cwd=ROOT, text=True, capture_output=True, env=env)
+    if check and r.returncode != 0:
+        msg = (r.stderr or r.stdout or "core command failed").strip()
+        raise RuntimeError(msg)
+    data: dict[str, str] = {}
+    for line in (r.stdout or "").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            data[k] = v
+    return data
 
-
-def run_training(config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Train a model from a config. Deterministic.
-
-    Returns a dict with:
-      * ``model_bytes``       — pickled model weights
-      * ``model_sha256``      — SHA-256 of those bytes
-      * ``arch_text``         — human-readable architecture description
-      * ``arch_sha256``       — SHA-256 of that text
-      * ``metrics``           — mse_train, mse_test, r2_test
-      * ``training_metadata`` — n_train, n_test, epochs, learning_rate,
-                                wall_time_seconds
-      * ``config_sha256``     — SHA-256 of the canonical config
-
-    Determinism assumption
-    ----------------------
-    This implementation is deterministic given the config: same seed,
-    same Python version, same result. Real ML training is *not*
-    deterministic in general. The exactness of the verification below
-    depends on this assumption, which the docstring marks honestly.
-    """
-
-    n_samples = int(config["n_samples"])
-    n_features = int(config["n_features"])
-    seed = int(config["seed"])
-    noise = float(config.get("noise", 0.1))
-    lr = float(config["learning_rate"])
-    epochs = int(config["epochs"])
-    train_fraction = float(config.get("train_fraction", 0.8))
-
-    X, y = synthesize_dataset(n_samples, n_features, seed, noise)
-    n_train = int(n_samples * train_fraction)
-    X_train, y_train = X[:n_train], y[:n_train]
-    X_test, y_test = X[n_train:], y[n_train:]
-
-    t0 = time.perf_counter()
-    w, b = train_linear_regression(X_train, y_train, n_features, lr, epochs)
-    wall_time = time.perf_counter() - t0
-
-    mse_train = evaluate_mse(X_train, y_train, w, b)
-    mse_test = evaluate_mse(X_test, y_test, w, b)
-    r2_test = evaluate_r2(X_test, y_test, w, b)
-
-    model_bytes = pickle.dumps(
-        {"w": w, "b": b, "n_features": n_features},
-        protocol=4,
-    )
-
-    arch_text = (
-        f"model_type=linear-regression\n"
-        f"framework=mlabchain-native\n"
-        f"n_features={n_features}\n"
-        f"optimizer=SGD\n"
-        f"learning_rate={lr}\n"
-        f"epochs={epochs}\n"
-    )
-
-    config_canonical = canonical_json(config)
-
-    return {
-        "model_bytes": model_bytes,
-        "model_sha256": sha256_bytes(model_bytes),
-        "arch_text": arch_text,
-        "arch_sha256": sha256_text(arch_text),
-        "config_sha256": sha256_text(config_canonical),
-        "metrics": {
-            "mse_train": mse_train,
-            "mse_test": mse_test,
-            "r2_test": r2_test,
-        },
-        "training_metadata": {
-            "n_train": len(X_train),
-            "n_test": len(X_test),
-            "epochs": epochs,
-            "learning_rate": lr,
-            "wall_time_seconds": wall_time,
-        },
-    }
-
-# Wallet
 
 class Wallet:
+    def __init__(self, private_key: Ed25519PrivateKey | None = None):
+        self.private_key = private_key or Ed25519PrivateKey.generate()
 
-    def __init__(
-        self,
-        private_key_pem: Optional[str] = None,
-        public_key_pem: Optional[str] = None,
-    ):
-        if private_key_pem:
-            self.private_key = serialization.load_pem_private_key(
-                private_key_pem.encode("utf-8"), password=None,
-            )
-        else:
-            self.private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=2048,
-            )
-        if public_key_pem:
-            self.public_key = serialization.load_pem_public_key(
-                public_key_pem.encode("utf-8")
-            )
-        else:
-            self.public_key = self.private_key.public_key()
+    @property
+    def public_bytes(self) -> bytes:
+        return self.private_key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
 
-    def private_pem(self) -> str:
-        return self.private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        ).decode("utf-8")
+    @property
+    def public_hex(self) -> str:
+        return self.public_bytes.hex()
 
-    def public_pem(self) -> str:
-        return self.public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode("utf-8")
-
+    @property
     def address(self) -> str:
-        digest = hashlib.sha256(self.public_pem().encode("utf-8")).hexdigest()
-        return "ML-" + digest[:20]
+        return "MERA1" + sha256_bytes(self.public_bytes)[:40]
 
     def sign(self, message: str) -> str:
-        sig = self.private_key.sign(
-            message.encode("utf-8"),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
+        return self.private_key.sign(message.encode("utf-8")).hex()
+
+    def encrypted_dict(self, password: str) -> dict[str, Any]:
+        salt = secrets.token_bytes(16)
+        nonce = secrets.token_bytes(12)
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=WALLET_KDF_ITERATIONS)
+        key = kdf.derive(password.encode("utf-8"))
+        raw_private = self.private_key.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
         )
-        return base64.b64encode(sig).decode("ascii")
+        ciphertext = AESGCM(key).encrypt(nonce, raw_private, b"MERA-WALLET-V1")
+        return {
+            "version": 1,
+            "address": self.address,
+            "public_key": self.public_hex,
+            "kdf": "PBKDF2-HMAC-SHA256",
+            "iterations": WALLET_KDF_ITERATIONS,
+            "salt": salt.hex(),
+            "nonce": nonce.hex(),
+            "ciphertext": ciphertext.hex(),
+        }
 
     @staticmethod
-    def verify(public_key_pem: str, message: str, signature_b64: str) -> bool:
-        try:
-            pk = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
-            sig = base64.b64decode(signature_b64)
-            pk.verify(
-                sig, message.encode("utf-8"),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-            return True
-        except Exception:
-            return False
+    def from_file(path: Path, password: str) -> "Wallet":
+        d = json.loads(path.read_text(encoding="utf-8"))
+        if d.get("version") != 1:
+            raise ValueError("unsupported wallet version")
+        salt = bytes.fromhex(d["salt"])
+        nonce = bytes.fromhex(d["nonce"])
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=int(d["iterations"]))
+        key = kdf.derive(password.encode("utf-8"))
+        raw = AESGCM(key).decrypt(nonce, bytes.fromhex(d["ciphertext"]), b"MERA-WALLET-V1")
+        w = Wallet(Ed25519PrivateKey.from_private_bytes(raw))
+        if w.address != d["address"] or w.public_hex != d["public_key"]:
+            raise ValueError("wallet integrity check failed")
+        return w
 
 
-def save_wallet(wallet: Wallet) -> None:
-    ensure_data_dir()
-    WALLET_FILE.write_text(
-        json.dumps(
-            {
-                "address": wallet.address(),
-                "private_key": wallet.private_pem(),
-                "public_key": wallet.public_pem(),
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+def save_wallet(w: Wallet, password: str) -> None:
+    ensure_dirs()
+    WALLET_FILE.write_text(json.dumps(w.encrypted_dict(password), indent=2), encoding="utf-8")
+
+
+def wallet_password(confirm: bool = False) -> str:
+    env = os.environ.get("MERAWALLET_PASSWORD")
+    if env is not None:
+        return env
+    p = getpass.getpass("Mera wallet password: ")
+    if confirm:
+        q = getpass.getpass("Repeat password: ")
+        if p != q:
+            raise ValueError("passwords do not match")
+    return p
 
 
 def load_wallet() -> Wallet:
     if not WALLET_FILE.exists():
         w = Wallet()
-        save_wallet(w)
+        save_wallet(w, wallet_password(confirm=True))
         return w
-    data = json.loads(WALLET_FILE.read_text(encoding="utf-8"))
-    return Wallet(
-        private_key_pem=data["private_key"],
-        public_key_pem=data["public_key"],
-    )
+    return Wallet.from_file(WALLET_FILE, wallet_password())
 
-# Transaction
 
 @dataclass
-class Transaction:
+class Challenge:
+    challenge_id: str
+    description: str
+    dataset_kind: str
+    dataset_sha256: str
+    n_samples: int
+    n_features: int
+    generator_seed: int
+    generator_noise: float
+    split_rule: str
+    train_fraction: float
+    metric: str
+    baseline_kind: str
+    baseline_nmse: float
+    baseline_model_sha256: str | None
+    max_epochs: int = 1000
+    verifier: str = "MLabChain-linear-v3"
+    lswu_N0: float = LSWU_N0
+    lswu_t0: float = LSWU_T0
+    lswu_eta: float = LSWU_ETA
+    lswu_wN: float = LSWU_WN
+    lswu_wt: float = LSWU_WT
+    lswu_wQ: float = LSWU_WQ
+    schema_version: int = SCHEMA_VERSION
+    manifest_sha256: str = ""
 
-    tx_type: str
-    sender: str
-    timestamp: str
-    payload: Dict[str, Any]
-    public_key: str
-    signature: str
-    nonce: str
+    def without_hash(self) -> dict[str, Any]:
+        d = asdict(self)
+        d.pop("manifest_sha256", None)
+        return d
 
-    def unsigned_payload(self) -> Dict[str, Any]:
-        return {
-            "tx_type": self.tx_type,
-            "sender": self.sender,
-            "timestamp": self.timestamp,
-            "payload": self.payload,
-            "public_key": self.public_key,
-            "nonce": self.nonce,
-        }
+    def compute_hash(self) -> str:
+        return sha256_text(canonical_json(self.without_hash()))
 
-    def signing_message(self) -> str:
-        return canonical_json(self.unsigned_payload())
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = self.unsigned_payload()
-        data["signature"] = self.signature
-        return data
-
-    def tx_hash(self) -> str:
-        return sha256_text(canonical_json(self.to_dict()))
-
-    def verify_signature(self) -> bool:
-        return Wallet.verify(
-            self.public_key, self.signing_message(), self.signature,
-        )
+    def to_dict(self) -> dict[str, Any]:
+        d = self.without_hash()
+        d["manifest_sha256"] = self.compute_hash()
+        return d
 
 
-def build_signed_transaction(
-    wallet: Wallet, tx_type: str, payload: Dict[str, Any],
-) -> Transaction:
-    tx = Transaction(
-        tx_type=tx_type,
-        sender=wallet.address(),
-        timestamp=utc_now(),
-        payload=payload,
-        public_key=wallet.public_pem(),
-        signature="",
-        nonce=secrets.token_hex(16),
+def synthesize_dataset(n_samples: int, n_features: int, seed: int, noise: float):
+    rng = random.Random(seed)
+    w_true = [rng.uniform(-1.0, 1.0) for _ in range(n_features)]
+    b_true = rng.uniform(-1.0, 1.0)
+    X: list[list[float]] = []
+    y: list[float] = []
+    for _ in range(n_samples):
+        x = [rng.gauss(0.0, 1.0) for _ in range(n_features)]
+        target = b_true + sum(w_true[j] * x[j] for j in range(n_features)) + rng.gauss(0.0, noise)
+        X.append(x)
+        y.append(target)
+    return X, y
+
+
+def dataset_commitment(X: list[list[float]], y: list[float]) -> str:
+    h = hashlib.sha256()
+    for x in X:
+        h.update((",".join(f"{v:.12f}" for v in x) + "\n").encode())
+    h.update(b"---\n")
+    for v in y:
+        h.update((f"{v:.12f}\n").encode())
+    return h.hexdigest()
+
+
+def split_dataset(X, y, fraction: float):
+    k = int(len(X) * fraction)
+    return X[:k], y[:k], X[k:], y[k:]
+
+
+def train_linear_regression(X, y, n_features: int, lr: float, epochs: int):
+    w = [0.0] * n_features
+    b = 0.0
+    for _ in range(epochs):
+        for i, row in enumerate(X):
+            pred = b + sum(w[j] * row[j] for j in range(n_features))
+            err = pred - y[i]
+            for j in range(n_features):
+                w[j] -= lr * err * row[j]
+            b -= lr * err
+    return w, b
+
+
+def mse(X, y, w, b):
+    if not y:
+        return math.nan
+    return sum((b + sum(w[j] * X[i][j] for j in range(len(w))) - y[i]) ** 2 for i in range(len(y))) / len(y)
+
+
+def variance(y):
+    m = sum(y) / len(y)
+    return sum((v - m) ** 2 for v in y) / len(y)
+
+
+def r2(X, y, w, b):
+    v = variance(y)
+    return 1.0 - (mse(X, y, w, b) / v) if v > 0 else 0.0
+
+
+def compute_lswu(n_train, wall_time_seconds, nmse_model, nmse_baseline, *, N0=LSWU_N0, t0=LSWU_T0, eta=LSWU_ETA, wN=LSWU_WN, wt=LSWU_WT, wQ=LSWU_WQ):
+    D = max(math.log1p(n_train / N0), 1e-12)
+    T = max(math.log1p(max(wall_time_seconds, 0.0) / t0), 1e-12)
+    I = nmse_baseline / nmse_model if nmse_model > 0 and nmse_baseline > 0 else 1.0
+    I_eta = I ** eta
+    Q = max(I_eta / (1.0 + I_eta), 1e-12)
+    return {"N": n_train, "t": wall_time_seconds, "I": I, "D": D, "T": T, "Q": Q, "LSWU": D ** wN * T ** wt * Q ** wQ,
+            "N0": N0, "t0": t0, "eta": eta, "w_N": wN, "w_t": wt, "w_Q": wQ}
+
+
+def ops_for(n_train: int, n_features: int, epochs: int) -> int:
+    return int(epochs) * int(n_train) * (3 * int(n_features) + 4)
+
+
+def work_reward_atomic(ops: int, nmse: float, baseline: float) -> int:
+    nmse_s = max(1, int(round(nmse * 1_000_000_000)))
+    base_s = max(1, int(round(baseline * 1_000_000_000)))
+    if nmse_s >= base_s:
+        return 0
+    quality_ppm = min(1_000_000, ((base_s - nmse_s) * 1_000_000) // base_s)
+    reward = (int(ops) * quality_ppm * ATOMIC_PER_MERA) // (OPS_PER_MERA * 1_000_000)
+    return min(reward, MAX_WORK_REWARD_ATOMIC)
+
+
+def build_challenge(args: argparse.Namespace) -> Challenge:
+    X, y = synthesize_dataset(args.n_samples, args.n_features, args.seed, args.noise)
+    Xtr, ytr, Xte, yte = split_dataset(X, y, args.train_fraction)
+    _ = Xtr, ytr
+    base_nmse = mse(Xte, yte, [0.0] * args.n_features, sum(yte) / len(yte)) / variance(yte)
+    ch = Challenge(
+        challenge_id=args.id,
+        description=f"Deterministic synthetic linear regression, N={args.n_samples}, F={args.n_features}, noise={args.noise}, seed={args.seed}",
+        dataset_kind="synthetic_linear",
+        dataset_sha256=dataset_commitment(X, y),
+        n_samples=args.n_samples,
+        n_features=args.n_features,
+        generator_seed=args.seed,
+        generator_noise=args.noise,
+        split_rule="first_fraction",
+        train_fraction=args.train_fraction,
+        metric="NMSE",
+        baseline_kind="mean_predictor",
+        baseline_nmse=base_nmse,
+        baseline_model_sha256=None,
+        max_epochs=args.max_epochs,
     )
-    tx.signature = wallet.sign(tx.signing_message())
-    return tx
+    Path(args.output).write_text(json.dumps(ch.to_dict(), indent=2), encoding="utf-8")
+    return ch
 
-# Training transaction
 
-def create_training_transaction(
-    wallet: Wallet,
-    config: Dict[str, Any],
-    training_result: Dict[str, Any],
-    model_path: Path,
-    arch_path: Path,
-    notes: str = "",
-    tags: Optional[List[str]] = None,
-) -> Transaction:
-    """
-    Build a signed transaction describing one training run.
+def load_challenge(path: str | Path) -> Challenge:
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    recorded = d.get("manifest_sha256")
+    d.pop("manifest_sha256", None)
+    # Compatible with v2 manifests, while writing v3 for new challenges.
+    d.setdefault("max_epochs", 1000)
+    d.setdefault("verifier", "MLabChain-linear-v3")
+    d.setdefault("schema_version", SCHEMA_VERSION)
+    ch = Challenge(**d)
+    if recorded and recorded != ch.compute_hash():
+        raise ValueError("challenge manifest hash mismatch")
+    return ch
 
-    The payload records:
-      * the config content itself (signed, so it cannot be changed),
-      * the config file's hash and path,
-      * the model file's hash and path,
-      * the architecture file's hash, path, and text content,
-      * training metadata: n_train, n_test, epochs, learning rate,
-        reported wall time in seconds,
-      * metrics: mse_train, mse_test, r2_test.
 
-    A verifier re-trains from the config content and checks that the
-    metrics (and, in a deterministic world, the model bytes) match.
-    """
+def materialize_challenge(ch: Challenge):
+    if ch.dataset_kind != "synthetic_linear":
+        raise ValueError("this reference build supports only synthetic_linear challenges")
+    X, y = synthesize_dataset(ch.n_samples, ch.n_features, ch.generator_seed, ch.generator_noise)
+    if dataset_commitment(X, y) != ch.dataset_sha256:
+        raise RuntimeError("dataset commitment mismatch")
+    return X, y
 
-    payload = {
-        "schema_version": SCHEMA_VERSION,
-        "kind": "ml-training",
-        "framework": config.get("framework", "mlabchain-native"),
-        "model_type": config.get("model_type", "linear-regression"),
 
-        "config": config,
-        "config_sha256": training_result["config_sha256"],
-        "config_file": {
-            "path": str(Path(model_path).parent / "config.json"),
-        },
-
-        "model_file": {
-            "path": str(model_path.resolve()),
-            "sha256": training_result["model_sha256"],
-            "size_bytes": len(training_result["model_bytes"]),
-        },
-
-        "arch_file": {
-            "path": str(arch_path.resolve()),
-            "sha256": training_result["arch_sha256"],
-            "size_bytes": len(training_result["arch_text"].encode("utf-8")),
-            "text": training_result["arch_text"],
-        },
-
-        "training": training_result["training_metadata"],
-        "metrics": training_result["metrics"],
-
-        "notes": notes,
-        "tags": tags or [],
-        "recorded_at": utc_now(),
+def run_training(ch: Challenge, config: dict[str, Any]) -> dict[str, Any]:
+    if config.get("model_type", "linear-regression") != "linear-regression":
+        raise ValueError("v0.2 supports deterministic linear-regression only")
+    epochs = int(config.get("epochs", 30))
+    if not 1 <= epochs <= ch.max_epochs:
+        raise ValueError(f"epochs must be in [1,{ch.max_epochs}]")
+    lr = float(config.get("learning_rate", 0.01))
+    X, y = materialize_challenge(ch)
+    Xtr, ytr, Xte, yte = split_dataset(X, y, ch.train_fraction)
+    t0 = time.perf_counter()
+    w, b = train_linear_regression(Xtr, ytr, ch.n_features, lr, epochs)
+    wall = time.perf_counter() - t0
+    m_train = mse(Xtr, ytr, w, b)
+    m_test = mse(Xte, yte, w, b)
+    v_test = variance(yte)
+    nmse = m_test / v_test if v_test > 0 else math.inf
+    arch = "\n".join([
+        "model_type=linear-regression",
+        "framework=mlabchain-native",
+        f"n_features={ch.n_features}",
+        "optimizer=SGD",
+        f"learning_rate={lr}",
+        f"epochs={epochs}",
+        "deterministic=true",
+        "verifier=MLabChain-linear-v3",
+    ]) + "\n"
+    model_bytes = pickle.dumps({"w": w, "b": b, "n_features": ch.n_features}, protocol=4)
+    lswu = compute_lswu(len(Xtr), wall, nmse, ch.baseline_nmse, N0=ch.lswu_N0, t0=ch.lswu_t0, eta=ch.lswu_eta, wN=ch.lswu_wN, wt=ch.lswu_wt, wQ=ch.lswu_wQ)
+    ops = ops_for(len(Xtr), ch.n_features, epochs)
+    reward = work_reward_atomic(ops, nmse, ch.baseline_nmse)
+    return {
+        "model_bytes": model_bytes,
+        "model_sha256": sha256_bytes(model_bytes),
+        "arch_text": arch,
+        "arch_sha256": sha256_text(arch),
+        "config_sha256": sha256_text(canonical_json(config)),
+        "training": {"n_train": len(Xtr), "n_test": len(Xte), "epochs": epochs, "learning_rate": lr, "wall_time_seconds": wall, "wall_ms": int(round(wall * 1000))},
+        "metrics": {"mse_train": m_train, "mse_test": m_test, "var_test": v_test, "nmse_model": nmse, "nmse_baseline": ch.baseline_nmse, "r2_test": r2(Xte, yte, w, b)},
+        "ops": ops,
+        "reward_atomic": reward,
+        "lswu": lswu,
     }
 
-    return build_signed_transaction(wallet, "ML_TRAINING", payload)
 
+def transfer_message(sender, recipient, amount, fee, nonce, public_key):
+    return f"TRANSFER|{sender}|{recipient}|{amount}|{fee}|{nonce}|{public_key}"
 
-# Merkle tree
 
-def merkle_root(transaction_dicts: List[Dict[str, Any]]) -> str:
-    """
-    Merkle root with leaf/parent domain separation ('L' / 'N' prefixes).
+def ml_message(sender, challenge_id, manifest, dataset, model, arch, ops, n_train, n_features, epochs, nmse_scaled, baseline_scaled, reward, wall_ms, lswu_micro, nonce, public_key):
+    return "|".join(["ML_WORK", sender, challenge_id, manifest, dataset, model, arch, str(ops), str(n_train), str(n_features), str(epochs), str(nmse_scaled), str(baseline_scaled), str(reward), str(wall_ms), str(lswu_micro), str(nonce), public_key])
 
-    Eliminates the leaf-vs-internal-node collision class that made the
-    original Bitcoin merkle scheme ambiguous (CVE-2012-2459).
-    """
 
-    if not transaction_dicts:
-        return sha256_text("EMPTY")
+def core_nonce(address: str) -> int:
+    return int(core("nonce", "--address", address)["NONCE"])
 
-    hashes = [sha256_text("L" + canonical_json(tx)) for tx in transaction_dicts]
 
-    while len(hashes) > 1:
-        if len(hashes) % 2 != 0:
-            hashes.append(hashes[-1])
-        next_level: List[str] = []
-        for i in range(0, len(hashes), 2):
-            next_level.append(
-                sha256_text("N" + hashes[i] + hashes[i + 1])
-            )
-        hashes = next_level
+def save_training_artifacts(result: dict[str, Any], challenge: Challenge, config: dict[str, Any]) -> tuple[Path, Path, Path]:
+    ensure_dirs()
+    stem = f"model_{result['model_sha256'][:16]}"
+    model = MODEL_DIR / f"{stem}.pkl"
+    arch = MODEL_DIR / f"{stem}.txt"
+    proof = PROOF_DIR / f"{stem}.json"
+    model.write_bytes(result["model_bytes"])
+    arch.write_text(result["arch_text"], encoding="utf-8")
+    proof.write_text(json.dumps({"schema_version": SCHEMA_VERSION, "challenge": challenge.to_dict(), "config": config, "result": {k:v for k,v in result.items() if k != "model_bytes"}}, indent=2), encoding="utf-8")
+    return model, arch, proof
 
-    return hashes[0]
 
+def command_create_wallet(_: argparse.Namespace) -> None:
+    if WALLET_FILE.exists() and not _.force:
+        raise RuntimeError(f"wallet already exists: {WALLET_FILE}; use --force to replace")
+    w = Wallet()
+    save_wallet(w, wallet_password(confirm=True))
+    core("init")
+    print(f"Wallet: {w.address}")
+    print(f"Public key: {w.public_hex}")
+    print(f"Encrypted file: {WALLET_FILE}")
 
-# Block
 
-@dataclass
-class Block:
-
-    index: int
-    timestamp: str
-    previous_hash: str
-    merkle_root: str
-    transactions: List[Dict[str, Any]]
-    difficulty: int
-    nonce: int = 0
-    block_hash: str = ""
-
-    def header(self) -> Dict[str, Any]:
-        return {
-            "index": self.index,
-            "timestamp": self.timestamp,
-            "previous_hash": self.previous_hash,
-            "merkle_root": self.merkle_root,
-            "difficulty": self.difficulty,
-            "nonce": self.nonce,
-        }
-
-    def calculate_hash(self) -> str:
-        return sha256_text(canonical_json(self.header()))
-
-    def mine(self) -> None:
-        target = "0" * self.difficulty
-        print(f"Mining block #{self.index} (hash difficulty={self.difficulty})...")
-        start = time.perf_counter()
-        self.nonce = 0
-        while True:
-            candidate = self.calculate_hash()
-            if candidate.startswith(target):
-                self.block_hash = candidate
-                elapsed = time.perf_counter() - start
-                rate = self.nonce / elapsed if elapsed > 0 else 0
-                print(
-                    f"Block mined.\n"
-                    f"  hash    : {candidate}\n"
-                    f"  nonce   : {self.nonce}\n"
-                    f"  hash time: {elapsed:.4f} s  ({rate:,.0f} H/s)"
-                )
-                return
-            self.nonce += 1
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "index": self.index,
-            "timestamp": self.timestamp,
-            "previous_hash": self.previous_hash,
-            "merkle_root": self.merkle_root,
-            "transactions": self.transactions,
-            "difficulty": self.difficulty,
-            "nonce": self.nonce,
-            "block_hash": self.block_hash,
-        }
-
-    @staticmethod
-    def from_dict(data: Dict[str, Any]) -> "Block":
-        return Block(
-            index=data["index"],
-            timestamp=data["timestamp"],
-            previous_hash=data["previous_hash"],
-            merkle_root=data["merkle_root"],
-            transactions=data["transactions"],
-            difficulty=data["difficulty"],
-            nonce=data["nonce"],
-            block_hash=data["block_hash"],
-        )
-
-# Blockchain
-
-class Blockchain:
-
-    def __init__(self, difficulty: int = DEFAULT_DIFFICULTY):
-        self.difficulty = difficulty
-        self.chain: List[Block] = []
-        self.pending_transactions: List[Dict[str, Any]] = []
-
-        if BLOCKCHAIN_FILE.exists():
-            self.load()
-        else:
-            self.create_genesis_block()
-            self.save()
-
-    def create_genesis_block(self) -> None:
-        genesis = Block(
-            index=0,
-            timestamp="GENESIS",
-            previous_hash="0" * 64,
-            merkle_root=sha256_text("GENESIS"),
-            transactions=[],
-            difficulty=GENESIS_DIFFICULTY,
-            nonce=0,
-        )
-        genesis.block_hash = genesis.calculate_hash()
-        self.chain.append(genesis)
-
-    @property
-    def latest_block(self) -> Block:
-        return self.chain[-1]
-
-    def add_transaction(self, tx: Transaction) -> None:
-        if not tx.verify_signature():
-            raise ValueError("Transaction signature is invalid.")
-        self.pending_transactions.append(tx.to_dict())
-        print("\nTransaction accepted.")
-        print(f"Transaction hash: {tx.tx_hash()}")
-
-    def mine_pending(self) -> Block:
-        if not self.pending_transactions:
-            raise RuntimeError("No pending transactions to mine.")
-        block = Block(
-            index=len(self.chain),
-            timestamp=utc_now(),
-            previous_hash=self.latest_block.block_hash,
-            merkle_root=merkle_root(self.pending_transactions),
-            transactions=copy.deepcopy(self.pending_transactions),
-            difficulty=self.difficulty,
-        )
-        block.mine()
-        self.chain.append(block)
-        self.pending_transactions.clear()
-        self.save()
-        return block
-
-    def save(self) -> None:
-        ensure_data_dir()
-        BLOCKCHAIN_FILE.write_text(
-            json.dumps(
-                {
-                    "difficulty": self.difficulty,
-                    "merkle_scheme": MERKLE_SCHEME,
-                    "schema_version": SCHEMA_VERSION,
-                    "chain": [b.to_dict() for b in self.chain],
-                    "pending_transactions": self.pending_transactions,
-                },
-                indent=2,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-
-    def load(self) -> None:
-        try:
-            data = json.loads(BLOCKCHAIN_FILE.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"Corrupt blockchain file {BLOCKCHAIN_FILE}: {exc}"
-            ) from exc
-        try:
-            self.chain = [Block.from_dict(b) for b in data["chain"]]
-        except (KeyError, TypeError) as exc:
-            raise RuntimeError(
-                f"Malformed block in {BLOCKCHAIN_FILE}: {exc}"
-            ) from exc
-        self.difficulty = data.get("difficulty", DEFAULT_DIFFICULTY)
-        self.pending_transactions = data.get("pending_transactions", [])
-
-    def validate(self) -> bool:
-        if not self.chain:
-            print("Blockchain is empty.")
-            return False
-
-        genesis = self.chain[0]
-        if genesis.previous_hash != "0" * 64:
-            print("Invalid genesis previous hash.")
-            return False
-
-        for i, block in enumerate(self.chain):
-            if block.block_hash != block.calculate_hash():
-                print(f"Invalid hash in block #{block.index}")
-                return False
-            if not block.block_hash.startswith("0" * block.difficulty):
-                print(f"Invalid Proof-of-Work in block #{block.index}")
-                return False
-            if i > 0:
-                previous = self.chain[i - 1]
-                if block.previous_hash != previous.block_hash:
-                    print(f"Broken chain at block #{block.index}")
-                    return False
-                if block.merkle_root != merkle_root(block.transactions):
-                    print(f"Invalid Merkle root in block #{block.index}")
-                    return False
-
-            for tx_data in block.transactions:
-                try:
-                    tx = Transaction(
-                        tx_type=tx_data["tx_type"],
-                        sender=tx_data["sender"],
-                        timestamp=tx_data["timestamp"],
-                        payload=tx_data["payload"],
-                        public_key=tx_data["public_key"],
-                        signature=tx_data["signature"],
-                        nonce=tx_data["nonce"],
-                    )
-                    if not tx.verify_signature():
-                        print(
-                            f"Invalid transaction signature "
-                            f"in block #{block.index}"
-                        )
-                        return False
-                except Exception as exc:
-                    print(f"Transaction validation failed: {exc}")
-                    return False
-
-        print("\nBlockchain validation PASSED.")
-        print(f"Blocks       : {len(self.chain)}")
-        print(f"Transactions : {sum(len(b.transactions) for b in self.chain)}")
-        return True
-
-    def training_credit(self) -> Dict[str, Any]:
-        """
-        Aggregate the training work recorded in the chain.
-
-        'Credit' is a non-transferable counter equal to
-        sum(n_train * epochs) over every ML_TRAINING transaction, plus
-        the total reported wall time. It exists to make the "useful
-        work" visible. It is not a coin, not a balance, and cannot be
-        transferred or spent.
-        """
-
-        total_steps = 0
-        total_wall = 0.0
-        total_train = 0
-        n_tx = 0
-
-        for block in self.chain:
-            for tx in block.transactions:
-                p = tx["payload"]
-                if p.get("kind") != "ml-training":
-                    continue
-                t = p.get("training", {})
-                total_steps += int(t.get("n_train", 0)) * int(t.get("epochs", 0))
-                total_wall += float(t.get("wall_time_seconds", 0.0))
-                total_train += int(t.get("n_train", 0))
-                n_tx += 1
-
-        return {
-            "training_transactions": n_tx,
-            "total_training_examples": total_train,
-            "total_gradient_steps": total_steps,
-            "total_reported_wall_seconds": total_wall,
-        }
-
-    def print_chain(self) -> None:
-        print("\n" + "=" * 78)
-        print("MLabChain")
-        print("=" * 78)
-        print(f"Blocks              : {len(self.chain)}")
-        print(f"Pending transactions: {len(self.pending_transactions)}")
-        print(f"Merkle scheme       : {MERKLE_SCHEME}")
-        print("-" * 78)
-
-        for block in self.chain:
-            print(f"\nBlock #{block.index}")
-            print(f"  Timestamp     : {block.timestamp}")
-            print(f"  Hash          : {block.block_hash}")
-            print(f"  Previous hash : {block.previous_hash}")
-            print(f"  Merkle root   : {block.merkle_root}")
-            print(f"  Difficulty    : {block.difficulty}")
-            print(f"  Nonce         : {block.nonce}")
-            print(f"  Transactions  : {len(block.transactions)}")
-
-            for tx in block.transactions:
-                p = tx["payload"]
-                if p.get("kind") == "ml-training":
-                    mt = p.get("model_type", "?")
-                    fw = p.get("framework", "?")
-                    t = p.get("training", {})
-                    m = p.get("metrics", {})
-                    print(f"    - [ml-training] {fw} / {mt}")
-                    print(
-                        f"        n_train={t.get('n_train')} "
-                        f"n_test={t.get('n_test')} "
-                        f"epochs={t.get('epochs')}"
-                    )
-                    wall = t.get("wall_time_seconds")
-                    if wall is not None:
-                        print(f"        wall_time={wall:.4f} s")
-                    print(
-                        f"        mse_train={m.get('mse_train'):.6f}  "
-                        f"mse_test={m.get('mse_test'):.6f}  "
-                        f"r2_test={m.get('r2_test'):.6f}"
-                    )
-                else:
-                    print(f"    - [{tx['tx_type']}]")
-
-        print("=" * 78)
-
-# ML verification
-
-def find_training_records(
-    blockchain: Blockchain,
-    model_sha256: Optional[str] = None,
-    tx_hash: Optional[str] = None,
-) -> List[Tuple[int, Dict[str, Any]]]:
-    """
-    Return [(block_index, payload), …] matching the given selector.
-
-    ``model_sha256`` matches the recorded model file hash.
-    ``tx_hash`` matches the transaction hash.
-    """
-
-    out: List[Tuple[int, Dict[str, Any]]] = []
-
-    for block in blockchain.chain:
-        for tx in block.transactions:
-            payload = tx["payload"]
-            if payload.get("kind") != "ml-training":
-                continue
-            if tx_hash:
-                # Recompute the transaction hash from the dict we have.
-                tx_obj = Transaction(
-                    tx_type=tx["tx_type"],
-                    sender=tx["sender"],
-                    timestamp=tx["timestamp"],
-                    payload=payload,
-                    public_key=tx["public_key"],
-                    signature=tx["signature"],
-                    nonce=tx["nonce"],
-                )
-                if tx_obj.tx_hash() == tx_hash:
-                    out.append((block.index, payload))
-            elif model_sha256:
-                mf = payload.get("model_file") or {}
-                if mf.get("sha256") == model_sha256:
-                    out.append((block.index, payload))
-
-    return out
-
-
-def _approx_equal(a: float, b: float, rel_tol: float = 1e-9, abs_tol: float = 1e-12) -> bool:
-    return abs(a - b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
-
-
-def verify_ml_training(
-    blockchain: Blockchain,
-    model_path: Optional[str] = None,
-    tx_hash: Optional[str] = None,
-) -> None:
-    """
-    Verify an ML training transaction by re-training from its config.
-
-    This is the *point* of MLabChain: verification is not a cheap hash
-    check, it is the same computation the miner originally did. The
-    function measures its own training time and reports it alongside
-    the reported wall time from the transaction, making the
-    ``verification cost ≈ computation cost`` relation visible.
-    """
-
-    if not model_path and not tx_hash:
-        print("Provide either --model or --tx-hash.")
-        return
-
-    model_sha = None
-    if model_path:
-        p = Path(model_path)
-        if not p.exists():
-            print(f"File not found: {p}")
-            return
-        model_sha = hash_file(p)
-        print(f"\nModel file : {p.resolve()}")
-        print(f"Model SHA  : {model_sha}")
-
-    matches = find_training_records(
-        blockchain, model_sha256=model_sha, tx_hash=tx_hash,
-    )
-
-    if not matches:
-        print("\nSTATUS: NOT FOUND")
-        print("No matching ML training transaction in the chain.")
-        return
-
-    for block_idx, payload in matches:
-        print(f"\n--- Matching transaction in block #{block_idx} ---")
-
-        config = payload.get("config") or {}
-        recorded_metrics = payload.get("metrics") or {}
-        recorded_training = payload.get("training") or {}
-
-        print("Recorded config:")
-        for k in sorted(config.keys()):
-            print(f"    {k} = {config[k]}")
-        print("Recorded metrics:")
-        for k in sorted(recorded_metrics.keys()):
-            print(f"    {k} = {recorded_metrics[k]}")
-        print("Recorded training metadata:")
-        for k in sorted(recorded_training.keys()):
-            v = recorded_training[k]
-            if isinstance(v, float):
-                print(f"    {k} = {v:.6f}")
-            else:
-                print(f"    {k} = {v}")
-
-        # --- re-train ---
-        print("\nRe-training from the recorded config...")
-        t0 = time.perf_counter()
-        try:
-            rerun = run_training(config)
-        except Exception as exc:
-            print(f"Verification FAILED: re-training raised {exc}")
-            continue
-        verify_wall = time.perf_counter() - t0
-
-        # --- compare metrics ---
-        new_metrics = rerun["metrics"]
-        ok = True
-        for key in ("mse_train", "mse_test", "r2_test"):
-            if key not in recorded_metrics:
-                continue
-            a = float(recorded_metrics[key])
-            b = float(new_metrics[key])
-            match = _approx_equal(a, b)
-            marker = "OK " if match else "MISMATCH"
-            print(
-                f"  [{marker}] {key:10s}  recorded={a:.12f}  "
-                f"re-trained={b:.12f}"
-            )
-            if not match:
-                ok = False
-
-        # --- compare model bytes ---
-        if model_path:
-            recomputed_model_sha = rerun["model_sha256"]
-            recorded_model_sha = (payload.get("model_file") or {}).get("sha256")
-            if recomputed_model_sha == recorded_model_sha:
-                print(f"  [OK ] model bytes   match recorded SHA-256 exactly.")
-            else:
-                print(
-                    f"  [WARN] model bytes differ from recorded SHA-256.\n"
-                    f"         recorded : {recorded_model_sha}\n"
-                    f"         rerun    : {recomputed_model_sha}\n"
-                    f"         (This can happen across Python/pickle versions "
-                    f"even when metrics match.)"
-                )
-
-        # --- cost comparison ---
-        reported = float(recorded_training.get("wall_time_seconds", 0.0))
-        ratio = (verify_wall / reported) if reported > 0 else float("inf")
-
-        print("\nCost comparison (the point of the exercise):")
-        print(f"  reported training wall time : {reported:.6f} s")
-        print(f"  verification  wall time     : {verify_wall:.6f} s")
-        print(f"  ratio (verify / train)      : {ratio:.3f}×")
-
-        print(
-            f"\nSTATUS: {'VERIFIED' if ok else 'MISMATCH'}"
-        )
-
-# .Demo
-
-def run_demo() -> None:
-    print("\n" + "=" * 78)
-    print("MLabChain — DEMONSTRATION")
-    print("=" * 78)
-
-    ensure_data_dir()
-    wallet = load_wallet()
-    print(f"\nWallet address: {wallet.address()}")
-
-    blockchain = Blockchain(difficulty=DEFAULT_DIFFICULTY)
-
-    # Three small training runs with different configs so the chain has
-    # something to show. Deliberately tiny, so the demo runs in a second.
-    demo_configs = [
-        {
-            **DEFAULT_CONFIG,
-            "n_samples": 300,
-            "n_features": 3,
-            "seed": 1,
-            "epochs": 25,
-        },
-        {
-            **DEFAULT_CONFIG,
-            "n_samples": 400,
-            "n_features": 4,
-            "seed": 2,
-            "epochs": 30,
-        },
-        {
-            **DEFAULT_CONFIG,
-            "n_samples": 500,
-            "n_features": 5,
-            "seed": 3,
-            "epochs": 35,
-        },
-    ]
-
-    for i, cfg in enumerate(demo_configs, start=1):
-        print("\n" + "-" * 78)
-        print(f"DEMO TRAINING {i} — n_samples={cfg['n_samples']} "
-              f"n_features={cfg['n_features']} epochs={cfg['epochs']}")
-        print("-" * 78)
-
-        result = run_training(cfg)
-
-        # Write files under mlabchain_data/demo/
-        demo_dir = DATA_DIR / "demo"
-        demo_dir.mkdir(parents=True, exist_ok=True)
-        stem = f"model_{short_hash(result['config_sha256'])}"
-        model_path = demo_dir / f"{stem}.pkl"
-        arch_path = demo_dir / f"{stem}.txt"
-
-        model_path.write_bytes(result["model_bytes"])
-        arch_path.write_text(result["arch_text"], encoding="utf-8")
-
-        # Also write the config for reference (this is the config that
-        # a user would normally already have on disk).
-        config_path = demo_dir / f"{stem}.config.json"
-        config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-
-        m = result["metrics"]
-        t = result["training_metadata"]
-        print(f"  mse_train = {m['mse_train']:.6f}")
-        print(f"  mse_test  = {m['mse_test']:.6f}")
-        print(f"  r2_test   = {m['r2_test']:.6f}")
-        print(f"  wall_time = {t['wall_time_seconds']:.6f} s")
-        print(f"  model     = {model_path}")
-        print(f"  arch      = {arch_path}")
-
-        tx = create_training_transaction(
-            wallet=wallet,
-            config=cfg,
-            training_result=result,
-            model_path=model_path,
-            arch_path=arch_path,
-            notes=f"Demo training {i}",
-            tags=["demo", "linear-regression"],
-        )
-        blockchain.add_transaction(tx)
-        blockchain.mine_pending()
-
-    # --- report ---
-    blockchain.print_chain()
-    blockchain.validate()
-
-    print("\n" + "-" * 78)
-    print("CHAIN TRAINING CREDIT (non-transferable)")
-    print("-" * 78)
-    credit = blockchain.training_credit()
-    for k in sorted(credit.keys()):
-        v = credit[k]
-        if isinstance(v, float):
-            print(f"  {k} = {v:.6f}")
-        else:
-            print(f"  {k} = {v}")
-
-    # --- verify the last model by re-training ---
-    print("\n" + "-" * 78)
-    print("VERIFICATION — re-train and compare (this is the point)")
-    print("-" * 78)
-    last_cfg = demo_configs[-1]
-    last_result = run_training(last_cfg)
-    demo_dir = DATA_DIR / "demo"
-    stem = f"model_{short_hash(last_result['config_sha256'])}"
-    last_model = demo_dir / f"{stem}.pkl"
-
-    verify_ml_training(blockchain, model_path=str(last_model))
-
-    print("\nDemo complete.")
-
-# CLI commands
-
-def command_create_wallet() -> None:
-    wallet = Wallet()
-    save_wallet(wallet)
-    print("\nWallet created.")
-    print(f"Address    : {wallet.address()}")
-    print(f"Wallet file: {WALLET_FILE.resolve()}")
-    print(
-        "\nNote: the private key is stored in plaintext. "
-        "This is an educational tool — do not reuse this wallet "
-        "for anything of value."
-    )
-
-
-def command_hash_file(path: str) -> None:
-    p = Path(path)
-    if not p.exists():
-        print(f"File not found: {p}")
-        return
-    print(f"\nFile    : {p.resolve()}")
-    print(f"SHA-256 : {hash_file(p)}")
-    print(f"Size    : {p.stat().st_size} bytes")
+def command_challenge_create(args: argparse.Namespace) -> None:
+    ensure_dirs()
+    ch = build_challenge(args)
+    print(f"Challenge: {ch.challenge_id}")
+    print(f"Manifest: {Path(args.output).resolve()}")
+    print(f"Manifest SHA256: {ch.compute_hash()}")
+    print(f"Dataset SHA256: {ch.dataset_sha256}")
+    print(f"Baseline NMSE: {ch.baseline_nmse:.9f}")
 
 
 def command_mine(args: argparse.Namespace) -> None:
-    """
-    Mine a block.
-
-    If ``--config`` is given, train a model from it first, save the
-    resulting model.pkl and model.txt, create the training transaction,
-    then mine. Otherwise, mine any pending transactions.
-    """
-
-    wallet = load_wallet()
-    blockchain = Blockchain(difficulty=args.difficulty)
-
-    if args.config:
-        cfg_path = Path(args.config)
-        if not cfg_path.exists():
-            raise FileNotFoundError(f"Config not found: {cfg_path}")
-
-        config = json.loads(cfg_path.read_text(encoding="utf-8"))
-        if not isinstance(config, dict):
-            raise ValueError("Config must be a JSON object.")
-
-        print("\nTraining from config:")
-        for k in sorted(config.keys()):
-            print(f"    {k} = {config[k]}")
-
-        result = run_training(config)
-
-        m = result["metrics"]
-        t = result["training_metadata"]
-        print("\nTraining done.")
-        print(f"  mse_train = {m['mse_train']:.6f}")
-        print(f"  mse_test  = {m['mse_test']:.6f}")
-        print(f"  r2_test   = {m['r2_test']:.6f}")
-        print(f"  wall_time = {t['wall_time_seconds']:.6f} s")
-
-        # Where to write model + arch?
-        out_dir = Path(args.output_dir) if args.output_dir else MODEL_DIR
-        out_dir.mkdir(parents=True, exist_ok=True)
-        stem = f"model_{short_hash(result['config_sha256'])}"
-
-        model_path = out_dir / f"{stem}.pkl"
-        arch_path = out_dir / f"{stem}.txt"
-
-        model_path.write_bytes(result["model_bytes"])
-        arch_path.write_text(result["arch_text"], encoding="utf-8")
-
-        print(f"  model     = {model_path.resolve()}")
-        print(f"  arch      = {arch_path.resolve()}")
-
-        tx = create_training_transaction(
-            wallet=wallet,
-            config=config,
-            training_result=result,
-            model_path=model_path,
-            arch_path=arch_path,
-            notes=args.notes,
-            tags=args.tag,
-        )
-        blockchain.add_transaction(tx)
-
-    blockchain.mine_pending()
+    w = load_wallet()
+    core("init")
+    if not args.challenge or not args.config:
+        raise ValueError("--challenge and --config are required for ML mining")
+    ch = load_challenge(args.challenge)
+    config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+    result = run_training(ch, config)
+    model, arch, proof = save_training_artifacts(result, ch, config)
+    m = result["metrics"]
+    t = result["training"]
+    l = result["lswu"]
+    nonce = core_nonce(w.address) + 1
+    nmse_scaled = max(1, int(round(m["nmse_model"] * 1_000_000_000)))
+    baseline_scaled = max(1, int(round(m["nmse_baseline"] * 1_000_000_000)))
+    lswu_micro = max(0, int(round(l["LSWU"] * 1_000_000)))
+    msg = ml_message(w.address, ch.challenge_id, ch.compute_hash(), ch.dataset_sha256, result["model_sha256"], result["arch_sha256"], result["ops"], t["n_train"], ch.n_features, t["epochs"], nmse_scaled, baseline_scaled, result["reward_atomic"], t["wall_ms"], lswu_micro, nonce, w.public_hex)
+    sig = w.sign(msg)
+    out = core("submit-ml", "--sender", w.address, "--challenge-id", ch.challenge_id, "--manifest-sha256", ch.compute_hash(), "--dataset-sha256", ch.dataset_sha256, "--model-sha256", result["model_sha256"], "--arch-sha256", result["arch_sha256"], "--ops", str(result["ops"]), "--n-train", str(t["n_train"]), "--n-features", str(ch.n_features), "--epochs", str(t["epochs"]), "--nmse-scaled", str(nmse_scaled), "--baseline-scaled", str(baseline_scaled), "--work-reward", str(result["reward_atomic"]), "--wall-ms", str(t["wall_ms"]), "--lswu-micro", str(lswu_micro), "--nonce", str(nonce), "--public-key", w.public_hex, "--signature", sig, "--note", f"proof={proof.name}")
+    # Mera monetary issuance is blocked until the C++ core has accepted the exact deterministic reward.
+    mine = core("mine", "--difficulty", str(args.difficulty), "--producer", w.address)
+    print("\nML work accepted and block sealed.")
+    print(f"Challenge       : {ch.challenge_id}")
+    print(f"Model SHA256    : {result['model_sha256']}")
+    print(f"Verified ops    : {result['ops']:,}")
+    print(f"NMSE            : {m['nmse_model']:.9f}")
+    print(f"LSWU (audit)    : {l['LSWU']:.6f}")
+    print(f"Mera reward     : {mera_from_atomic(result['reward_atomic'])} MERA")
+    print(f"TXID            : {out.get('TXID','?')}")
+    print(f"Block height    : {mine.get('HEIGHT','?')}")
+    print(f"Block hash      : {mine.get('BLOCK_HASH','?')}")
+    print(f"Model artifact  : {model}")
+    print(f"Proof artifact  : {proof}")
 
 
-def command_status() -> None:
-    Blockchain().print_chain()
+def command_transfer(args: argparse.Namespace) -> None:
+    w = load_wallet()
+    amount = atomic_from_mera(args.amount)
+    fee = atomic_from_mera(args.fee) if args.fee else MIN_FEE_ATOMIC
+    nonce = core_nonce(w.address) + 1
+    msg = transfer_message(w.address, args.to, amount, fee, nonce, w.public_hex)
+    sig = w.sign(msg)
+    out = core("submit-transfer", "--sender", w.address, "--recipient", args.to, "--amount", str(amount), "--fee", str(fee), "--nonce", str(nonce), "--public-key", w.public_hex, "--signature", sig, "--note", args.note)
+    if args.mine:
+        mine = core("mine", "--difficulty", str(args.difficulty), "--producer", w.address)
+        print(f"Block: {mine.get('HEIGHT')} {mine.get('BLOCK_HASH')}")
+    print(f"TXID: {out['TXID']}")
 
 
-def command_validate() -> None:
-    Blockchain().validate()
+def command_faucet(args: argparse.Namespace) -> None:
+    amount = atomic_from_mera(args.amount)
+    core("faucet", "--recipient", args.address, "--amount", str(amount))
+    out = core("mine", "--difficulty", str(args.difficulty), "--producer", args.address)
+    print(f"Devnet mint: {mera_from_atomic(amount)} MERA")
+    print(f"Block: {out['HEIGHT']} {out['BLOCK_HASH']}")
 
 
-def command_credits() -> None:
-    bc = Blockchain()
-    credit = bc.training_credit()
-    print("\nChain training credit (non-transferable, not a coin):")
-    for k in sorted(credit.keys()):
-        v = credit[k]
-        if isinstance(v, float):
-            print(f"  {k} = {v:.6f}")
-        else:
-            print(f"  {k} = {v}")
+def command_balance(args: argparse.Namespace) -> None:
+    a = args.address or load_wallet().address
+    out = core("balance", "--address", a)
+    print(f"{a}: {out['BALANCE_MERA']} MERA")
+
+
+def command_status(_: argparse.Namespace) -> None:
+    out = core("status")
+    for k, v in out.items():
+        print(f"{k}: {v}")
+
+
+def command_validate(_: argparse.Namespace) -> None:
+    out = core("validate")
+    for k, v in out.items():
+        print(f"{k}: {v}")
+
+
+def command_show_tx(args: argparse.Namespace) -> None:
+    out = core("show-tx", "--txid", args.tx_hash)
+    for k, v in out.items(): print(f"{k}: {v}")
 
 
 def command_verify_ml(args: argparse.Namespace) -> None:
-    bc = Blockchain()
-    verify_ml_training(
-        bc,
-        model_path=args.model,
-        tx_hash=args.tx_hash,
-    )
-
-# Argument parser
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="mlabchain",
-        description=(
-            "MLabChain — proof-of-training blockchain for ML experiments. "
-            "Mining requires training; verification re-trains."
-        ),
-    )
-    sub = parser.add_subparsers(dest="command")
-
-    # demo
-    sub.add_parser("demo", help="Run the full demonstration.")
-
-    # create-wallet
-    sub.add_parser("create-wallet", help="Create a new RSA wallet.")
-
-    # hash-file
-    p_hash = sub.add_parser("hash-file", help="SHA-256 of a file.")
-    p_hash.add_argument("path")
-
-    # mine
-    p_mine = sub.add_parser(
-        "mine",
-        help=(
-            "Mine a block. With --config, trains a model first, "
-            "writes model.pkl and model.txt, and mines the training."
-        ),
-    )
-    p_mine.add_argument(
-        "--config",
-        help="Path to a config.json describing the training run.",
-    )
-    p_mine.add_argument(
-        "--output-dir",
-        help="Where to write model.pkl and model.txt (default: mlabchain_data/models/).",
-    )
-    p_mine.add_argument(
-        "--difficulty", type=int, default=DEFAULT_DIFFICULTY,
-        help="SHA-256 PoW difficulty for the block.",
-    )
-    p_mine.add_argument("--notes", default="")
-    p_mine.add_argument("--tag", action="append", default=[])
-
-    # chain ops
-    sub.add_parser("status", help="Display the chain.")
-    sub.add_parser("validate", help="Validate the chain.")
-    sub.add_parser("credits", help="Show accumulated training credit.")
-
-    # verify-ml
-    p_verify = sub.add_parser(
-        "verify-ml",
-        help=(
-            "Re-train a recorded model from its config and compare "
-            "metrics. Reports verification wall time versus reported "
-            "training wall time."
-        ),
-    )
-    g = p_verify.add_mutually_exclusive_group(required=True)
-    g.add_argument("--model", help="Path to a model.pkl to verify.")
-    g.add_argument("--tx-hash", help="Transaction hash to verify.")
-
-    return parser
-
-# Main
-
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
-
-    if not args.command:
-        parser.print_help()
-        return
-
-    try:
-        if args.command == "demo":
-            run_demo()
-        elif args.command == "create-wallet":
-            command_create_wallet()
-        elif args.command == "hash-file":
-            command_hash_file(args.path)
-        elif args.command == "mine":
-            command_mine(args)
-        elif args.command == "status":
-            command_status()
-        elif args.command == "validate":
-            command_validate()
-        elif args.command == "credits":
-            command_credits()
-        elif args.command == "verify-ml":
-            command_verify_ml(args)
-        else:
-            parser.print_help()
-    except KeyboardInterrupt:
-        print("\nOperation cancelled.")
-    except Exception as exc:
-        print(f"\nERROR: {exc}")
-        sys.exit(1)
+    if not args.tx_hash:
+        raise ValueError("--tx-hash is required")
+    tx = core("show-tx", "--txid", args.tx_hash)
+    ch_files = list(CHALLENGE_DIR.glob("*.json"))
+    challenge_path = next((p for p in ch_files if json.loads(p.read_text(encoding="utf-8")).get("challenge_id") == tx.get("CHALLENGE_ID")), None)
+    if challenge_path is None:
+        raise RuntimeError(f"challenge manifest {tx.get('CHALLENGE_ID')} is not available locally")
+    ch = load_challenge(challenge_path)
+    cfg_path = None
+    for p in PROOF_DIR.glob("*.json"):
+        try:
+            d=json.loads(p.read_text(encoding="utf-8"))
+            if d.get("challenge",{}).get("challenge_id")==ch.challenge_id and d.get("result",{}).get("model_sha256")==tx.get("MODEL_SHA256"):
+                cfg_path=p; break
+        except Exception:
+            pass
+    if cfg_path is None:
+        raise RuntimeError("matching local proof/config artifact not found")
+    proof = json.loads(cfg_path.read_text(encoding="utf-8"))
+    result = run_training(ch, proof["config"])
+    recorded_model = MODEL_DIR / f"model_{tx['MODEL_SHA256'][:16]}.pkl"
+    checks = {
+        "manifest_hash": tx["MANIFEST_SHA256"] == ch.compute_hash(),
+        "dataset_hash": tx["DATASET_SHA256"] == ch.dataset_sha256,
+        "model_hash": result["model_sha256"] == tx["MODEL_SHA256"] and recorded_model.exists() and hash_file(recorded_model) == tx["MODEL_SHA256"],
+        "arch_hash": result["arch_sha256"] == tx["ARCH_SHA256"],
+        "ops": str(result["ops"]) == tx["OPS"],
+        "reward": result["reward_atomic"] == int(tx["WORK_REWARD_ATOMIC"]),
+        "nmse": int(round(result["metrics"]["nmse_model"] * 1_000_000_000)) == int(tx["NMSE_SCALED"]),
+        "baseline": int(round(result["metrics"]["nmse_baseline"] * 1_000_000_000)) == int(tx["BASELINE_SCALED"]),
+    }
+    print("ML verification:")
+    for k,v in checks.items(): print(f"  {'OK' if v else 'FAIL':4s} {k}")
+    print(f"STATUS: {'VERIFIED' if all(checks.values()) else 'MISMATCH'}")
 
 
-if __name__ == "__main__":
-    main()
+def command_demo(_: argparse.Namespace) -> None:
+    ensure_dirs()
+    if not WALLET_FILE.exists():
+        w = Wallet(); save_wallet(w, os.environ.get("MERAWALLET_PASSWORD", "demo-password"))
+        print(f"Created demo wallet: {w.address}")
+    core("init")
+    w = Wallet.from_file(WALLET_FILE, os.environ.get("MERAWALLET_PASSWORD", "demo-password"))
+    # Fund devnet account once, then run a small deterministic ML contribution.
+    if int(core("balance", "--address", w.address)["BALANCE_ATOMIC"]) == 0:
+        core("faucet", "--recipient", w.address, "--amount", str(10 * ATOMIC_PER_MERA))
+        core("mine", "--difficulty", "2", "--producer", w.address)
+    ch = Challenge("MERA-DEMO-001", "Mera proof-of-useful-ML demonstration", "synthetic_linear", "", 200, 4, 7, 0.1, "first_fraction", 0.8, "NMSE", "mean_predictor", 1.0, None, 100)
+    X,y=synthesize_dataset(ch.n_samples,ch.n_features,ch.generator_seed,ch.generator_noise)
+    ch.dataset_sha256=dataset_commitment(X,y)
+    _,_,Xte,yte=split_dataset(X,y,ch.train_fraction)
+    ch.baseline_nmse=mse(Xte,yte,[0.0]*ch.n_features,sum(yte)/len(yte))/variance(yte)
+    path=CHALLENGE_DIR/f"{ch.challenge_id}.json"; path.write_text(json.dumps(ch.to_dict(),indent=2),encoding="utf-8")
+    cfg={**DEFAULT_CONFIG,"epochs":30}
+    proof=run_training(ch,cfg)
+    model,arch,pr=save_training_artifacts(proof,ch,cfg)
+    nonce=core_nonce(w.address)+1
+    ms=max(1,int(round(proof['metrics']['nmse_model']*1e9))); bs=max(1,int(round(proof['metrics']['nmse_baseline']*1e9)))
+    lm=max(0,int(round(proof['lswu']['LSWU']*1e6)))
+    sig=w.sign(ml_message(w.address,ch.challenge_id,ch.compute_hash(),ch.dataset_sha256,proof['model_sha256'],proof['arch_sha256'],proof['ops'],proof['training']['n_train'],ch.n_features,proof['training']['epochs'],ms,bs,proof['reward_atomic'],proof['training']['wall_ms'],lm,nonce,w.public_hex))
+    core("submit-ml","--sender",w.address,"--challenge-id",ch.challenge_id,"--manifest-sha256",ch.compute_hash(),"--dataset-sha256",ch.dataset_sha256,"--model-sha256",proof['model_sha256'],"--arch-sha256",proof['arch_sha256'],"--ops",str(proof['ops']),"--n-train",str(proof['training']['n_train']),"--n-features",str(ch.n_features),"--epochs",str(proof['training']['epochs']),"--nmse-scaled",str(ms),"--baseline-scaled",str(bs),"--work-reward",str(proof['reward_atomic']),"--wall-ms",str(proof['training']['wall_ms']),"--lswu-micro",str(lm),"--nonce",str(nonce),"--public-key",w.public_hex,"--signature",sig,"--note",f"demo={pr.name}")
+    core("mine","--difficulty","2","--producer",w.address)
+    print("Demo complete.")
+    command_status(argparse.Namespace())
+
+
+def parser() -> argparse.ArgumentParser:
+    p=argparse.ArgumentParser(prog="mlabchain",description="MLabChain scientific-work ledger with Mera native asset")
+    s=p.add_subparsers(dest="cmd",required=True)
+    w=s.add_parser("create-wallet"); w.add_argument("--force",action="store_true"); w.set_defaults(func=command_create_wallet)
+    c=s.add_parser("challenge-create"); c.add_argument("--id",required=True); c.add_argument("--output",required=True); c.add_argument("--n-samples",type=int,default=400); c.add_argument("--n-features",type=int,default=4); c.add_argument("--seed",type=int,default=42); c.add_argument("--noise",type=float,default=0.1); c.add_argument("--train-fraction",type=float,default=0.8); c.add_argument("--max-epochs",type=int,default=1000); c.set_defaults(func=command_challenge_create)
+    m=s.add_parser("mine"); m.add_argument("--challenge",required=True); m.add_argument("--config",required=True); m.add_argument("--difficulty",type=int,default=DEFAULT_DIFFICULTY); m.set_defaults(func=command_mine)
+    t=s.add_parser("transfer"); t.add_argument("--to",required=True); t.add_argument("--amount",required=True); t.add_argument("--fee",default=None); t.add_argument("--note",default=""); t.add_argument("--mine",action="store_true"); t.add_argument("--difficulty",type=int,default=DEFAULT_DIFFICULTY); t.set_defaults(func=command_transfer)
+    f=s.add_parser("faucet"); f.add_argument("--address",required=True); f.add_argument("--amount",required=True); f.add_argument("--difficulty",type=int,default=2); f.set_defaults(func=command_faucet)
+    b=s.add_parser("balance"); b.add_argument("--address"); b.set_defaults(func=command_balance)
+    s0=s.add_parser("status"); s0.set_defaults(func=command_status)
+    v=s.add_parser("validate"); v.set_defaults(func=command_validate)
+    x=s.add_parser("show-tx"); x.add_argument("--tx-hash",required=True); x.set_defaults(func=command_show_tx)
+    q=s.add_parser("verify-ml"); q.add_argument("--tx-hash",required=True); q.set_defaults(func=command_verify_ml)
+    d=s.add_parser("demo"); d.set_defaults(func=command_demo)
+    return p
+
+
+def main():
+    args=parser().parse_args()
+    ensure_dirs()
+    try: args.func(args)
+    except KeyboardInterrupt: print("Cancelled.")
+    except Exception as e: print(f"ERROR: {e}"); raise SystemExit(1)
+
+
+if __name__ == "__main__": main()
