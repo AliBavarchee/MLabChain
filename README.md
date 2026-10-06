@@ -35,25 +35,25 @@ machine monetary while keeping ML work as the origin of new Mera.
                  │                              │
                  │ • deterministic ML trainer   │
                  │ • challenges/manifests       │
-                 │ • artifact hashing            │
-                 │ • LSWU scientific metric      │
-                 │ • encrypted wallet            │
-                 │ • transaction construction    │
+                 │ • artifact hashing           │
+                 │ • LSWU scientific metric     │
+                 │ • encrypted wallet           │
+                 │ • transaction construction   │
                  └──────────────┬───────────────┘
                                 │ command boundary
                                 ▼
                  ┌──────────────────────────────┐
-                 │          mera_core            │
+                 │          mera_core           │
                  │ C++ monetary/consensus core  │
                  │                              │
                  │ • Ed25519 verification       │
-                 │ • SQLite state                │
-                 │ • balances + nonces           │
-                 │ • signed tx validation        │
-                 │ • deterministic reward math   │
-                 │ • Merkle roots                │
-                 │ • SHA-256 block PoW           │
-                 │ • supply-cap enforcement      │
+                 │ • SQLite state               │
+                 │ • balances + nonces          │
+                 │ • signed tx validation       │
+                 │ • deterministic reward math  │
+                 │ • Merkle roots               │
+                 │ • SHA-256 block PoW          │
+                 │ • supply-cap enforcement     │
                  └──────────────────────────────┘
 
                  optional exchange representation
