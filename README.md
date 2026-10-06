@@ -1,5 +1,5 @@
-<p align="center">
-  <img src="matterials/mlabchain_txt.png" alt="MLabChain" width="290"/>
+<p align="left">
+  <img src="matterials/mlabchain_txt.png" alt="MLabChain" width="333"/>
 </p>
 ---
 
